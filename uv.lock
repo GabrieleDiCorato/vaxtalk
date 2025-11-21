@@ -2979,6 +2979,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "google-adk" },
+    { name = "pydantic" },
     { name = "python-dotenv" },
 ]
 
@@ -2991,6 +2992,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "google-adk", specifier = ">=1.19.0" },
+    { name = "pydantic", specifier = ">=2.12.4" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
 ]
 
