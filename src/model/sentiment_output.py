@@ -18,4 +18,3 @@ class SentimentOutput(BaseModel):
     frustration_level: Intensity = Field(..., description="The level of frustration expressed by the user.")
     confusion_level: Intensity = Field(..., description="The level of confusion expressed by the user.")
     satisfaction_level: Intensity = Field(..., description="The level of satisfaction expressed by the user.")
-    neutrality_level: Intensity = Field(..., description="The level of neutrality expressed by the user.") 
