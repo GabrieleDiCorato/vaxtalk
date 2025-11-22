@@ -162,7 +162,7 @@ prompt_aggregator = """You are an expert assistant, running a chat help line for
 Your task is to synthesize information. You have access to the following inputs:
 
 <User query>
-{user_query}
+{{session.state['user:input']}}
 </User query>
 
 <RAG Knowledge Base Output>
