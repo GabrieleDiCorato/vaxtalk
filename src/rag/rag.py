@@ -1,0 +1,172 @@
+"""
+RAG Knowledge Base Manager
+
+This module provides functionality to build and query a knowledge base
+for Retrieval-Augmented Generation (RAG) systems. It handles document
+processing, embedding generation, and retrieval - without any ADK dependencies.
+"""
+
+import numpy as np
+from pathlib import Path
+from typing import Optional
+
+from src.model.document_chunk import DocumentChunk
+from src.rag.pdf_handler import PdfHandler
+from src.rag.web_handler import WebHandler
+from src.rag.embedding_handler import EmbeddingHandler
+
+
+class RagKnowledgeBase:
+    """
+    Manages the knowledge base for RAG systems.
+
+    This class handles:
+    - Document loading from PDFs and websites
+    - Embedding generation and caching
+    - Vector-based retrieval
+
+    Does NOT include Agent/ADK functionality - that stays in the application layer.
+    """
+
+    def __init__(self, api_key: str, cache_dir: str | Path = "../cache"):
+        """
+        Initialize the knowledge base manager.
+
+        Args:
+            api_key: Google API key for embedding generation
+            cache_dir: Directory to cache embeddings and chunks
+        """
+        self.api_key = api_key
+        self.cache_dir = Path(cache_dir)
+
+        # Initialize embedding handler
+        self.embedding_handler = EmbeddingHandler(
+            api_key=api_key,
+            cache_dir=cache_dir
+        )
+
+        # Storage for embeddings and chunks
+        self.embeddings: np.ndarray = np.array([])
+        self.chunks: list[DocumentChunk] = []
+
+    def build_knowledge_base(
+        self,
+        pdf_folder: Optional[str | Path] = None,
+        root_url: Optional[str] = None,
+        max_pages: int = 100,
+        max_depth: int = 3,
+        use_cache: bool = True
+    ) -> None:
+        """
+        Build or load the knowledge base from documents.
+
+        Args:
+            pdf_folder: Path to folder containing PDF files
+            root_url: Starting URL for web crawling
+            max_pages: Maximum number of web pages to crawl
+            max_depth: Maximum crawl depth from root URL
+            use_cache: Whether to use cached embeddings if available
+        """
+        # Try to load from cache
+        if use_cache:
+            self.embeddings, self.chunks = self.embedding_handler.load_index_from_cache()
+
+        # Build fresh if cache is empty
+        if self.embeddings.size == 0:
+            print("Building knowledge base...")
+
+            all_chunks = []
+            current_id = 0
+
+            # Load PDFs if folder provided
+            if pdf_folder:
+                pdf_chunks = PdfHandler.load_pdfs_from_folder(str(pdf_folder))
+                all_chunks.extend(pdf_chunks)
+                current_id = pdf_chunks[-1].id + 1 if pdf_chunks else 0
+
+            # Crawl website if URL provided
+            if root_url:
+                web_chunks = WebHandler.crawl_website(
+                    root_url=root_url,
+                    max_pages=max_pages,
+                    max_depth=max_depth,
+                    start_id=current_id
+                )
+                all_chunks.extend(web_chunks)
+
+            # Build index if we have content
+            if all_chunks:
+                self.embeddings, self.chunks = self.embedding_handler.build_vector_index(all_chunks)
+                self.embedding_handler.save_index_to_cache(self.embeddings, self.chunks)
+                print(f"✅ Index built: {len(self.chunks)} chunks")
+            else:
+                print("⚠️ No content found")
+        else:
+            print(f"✅ Loaded from cache: {len(self.chunks)} chunks")
+
+    def clear_cache(self) -> None:
+        """Clear the cached embeddings and chunks."""
+        import shutil
+        if self.cache_dir.exists():
+            shutil.rmtree(self.cache_dir)
+            print("✅ Cache cleared")
+            # Reset in-memory data
+            self.embeddings = np.array([])
+            self.chunks = []
+        else:
+            print("⚠️ No cache to clear")
+
+    def retrieve(self, query: str, k: int = 5) -> str:
+        """
+        Retrieve relevant information for a query.
+
+        This method is designed to be used as a tool function for agents.
+
+        Args:
+            query: User's question
+            k: Number of top chunks to retrieve
+
+        Returns:
+            Formatted string with relevant information and source citations
+        """
+        if not self.chunks:
+            return "Error: Knowledge base not initialized. Build the knowledge base first."
+
+        try:
+            top_chunks = self.embedding_handler.retrieve_top_k(
+                query, self.embeddings, self.chunks, k=k
+            )
+            if not top_chunks:
+                return "No relevant information found."
+
+            # Format results with source citations
+            results = []
+            for c in top_chunks:
+                # Handle both old and new chunk formats
+                if hasattr(c, 'doc_type'):
+                    source = Path(str(c.source)).name if c.doc_type.value == "pdf" else str(c.source)
+                else:
+                    # Fallback for old cached chunks without doc_type
+                    source = str(c.source)
+                    if Path(source).suffix.lower() == '.pdf':
+                        source = Path(source).name
+
+                results.append(f"[SOURCE: {source}]\n{c.content}")
+
+            return "\n\n---\n\n".join(results)
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    def get_stats(self) -> dict:
+        """
+        Get statistics about the knowledge base.
+
+        Returns:
+            Dictionary with knowledge base statistics
+        """
+        return {
+            "num_chunks": len(self.chunks),
+            "embedding_shape": self.embeddings.shape if self.embeddings.size > 0 else (0, 0),
+            "cache_dir": str(self.cache_dir),
+            "has_data": len(self.chunks) > 0
+        }

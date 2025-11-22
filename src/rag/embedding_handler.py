@@ -106,6 +106,9 @@ class EmbeddingHandler:
                     model="text-embedding-004",
                     contents=batch
                 )
+                if not response or not response.embeddings:
+                    raise ValueError("No embeddings returned from Gemini API")
+
                 # Extract embedding vectors from response
                 vectors = [item.values for item in response.embeddings]
                 all_vectors.extend(vectors)
