@@ -118,16 +118,56 @@ class RagKnowledgeBase:
 
     def retrieve(self, query: str, k: int = 5) -> str:
         """
-        Retrieve relevant information for a query.
+        Retrieve relevant vaccine information from the knowledge base.
 
-        This method is designed to be used as a tool function for agents.
+        This function searches through official vaccine documents and web pages
+        to find the most relevant information for answering the user's question.
+        It uses semantic search with embeddings to find contextually similar content.
+
+        The function is designed to be used as a tool by AI agents. It returns
+        formatted text with source citations that the agent can use to formulate
+        accurate, grounded responses.
 
         Args:
-            query: User's question
-            k: Number of top chunks to retrieve
+            query (str): The user's question about vaccines. This should be a natural
+                language question such as "What vaccines are recommended for pregnant
+                women?" or "What are the side effects of the flu vaccine?"
+
+            k (int, optional): The number of most relevant text chunks to retrieve
+                from the knowledge base. More chunks provide more context but may
+                include less relevant information. Defaults to 5.
+                Range: 1-10 recommended.
 
         Returns:
-            Formatted string with relevant information and source citations
+            str: A formatted string containing the retrieved information with source
+                citations. Each piece of information is prefixed with [SOURCE: ...]
+                indicating where it came from (either a PDF filename or a web URL).
+                Multiple results are separated by "---" dividers.
+
+                Returns an error message if:
+                - The knowledge base is not initialized
+                - No relevant information is found
+                - An exception occurs during retrieval
+
+        Examples:
+            >>> result = rag_kb.retrieve("Are vaccines safe during pregnancy?")
+            >>> print(result)
+            [SOURCE: https://example.com/vaccines/pregnancy]
+            Vaccines recommended during pregnancy include...
+
+            ---
+
+            [SOURCE: vaccine_guidelines.pdf]
+            The flu vaccine is safe and recommended for all pregnant women...
+
+            >>> result = rag_kb.retrieve("COVID-19 vaccine schedule", k=3)
+            >>> # Returns top 3 most relevant chunks about COVID-19 vaccination
+
+        Note:
+            This function performs a similarity search using embeddings, so it may
+            return relevant information even if the exact keywords don't match.
+            Always check the sources to verify the information is appropriate for
+            the specific question asked.
         """
         if not self.chunks:
             return "Error: Knowledge base not initialized. Build the knowledge base first."
