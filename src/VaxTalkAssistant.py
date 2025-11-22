@@ -1,3 +1,7 @@
+""" VaxTalkAssistant: An AI assistant for vaccine information using RAG and sentiment analysis.
+    To launch the application:
+    adk web --port <PORT_NUM>
+"""
 from pathlib import Path
 
 # Google ADK Imports
@@ -12,25 +16,11 @@ from google.genai import types
 from google.adk.apps.app import App
 
 # Project Imports
-from src.config import load_env_variables, get_env_variable
+from src.config import load_env_variables, get_env_variable, get_env_int, get_env_list
 from src.model import SentimentOutput
 from src.rag.rag import RagKnowledgeBase
 
 print("✅ Project imports loaded")
-
-######################################
-## CONFIGURATION
-######################################
-
-project_root = Path.cwd().parent
-DOC_FOLDER_PATH = project_root / "src" / "Doc_vaccini"
-DOC_WEB_URL_ROOT = "https://www.serviziterritoriali-asstmilano.it/servizi/vaccinazioni/"
-CACHE_DIR = project_root / "cache"
-
-APP_NAME = "VaxTalkAssistant"
-SQL_ASYNC_DRIVER = "aiosqlite"
-DB_NAME = CACHE_DIR / "vaxtalk_sessions.db"
-DB_URL = f"sqlite+{SQL_ASYNC_DRIVER}:///{DB_NAME}"  # Local SQLite file
 
 ######################################
 ## ENV VARIABLES
@@ -39,6 +29,40 @@ DB_URL = f"sqlite+{SQL_ASYNC_DRIVER}:///{DB_NAME}"  # Local SQLite file
 load_env_variables()
 GOOGLE_API_KEY = get_env_variable("GOOGLE_API_KEY")
 print(f"✅ API key loaded")
+
+######################################
+## CONFIGURATION
+######################################
+
+project_root = Path.cwd().parent
+
+# Model Configuration
+MODEL_RAG = get_env_variable("MODEL_RAG", "gemini-2.5-flash-lite")
+MODEL_SENTIMENT = get_env_variable("MODEL_SENTIMENT", "gemini-2.5-flash-lite")
+MODEL_AGGREGATOR = get_env_variable("MODEL_AGGREGATOR", "gemini-2.5-flash-lite")
+
+# Paths & Directories
+DOC_FOLDER_PATH = project_root / get_env_variable("DOC_FOLDER_PATH", "src/Doc_vaccini")
+DOC_WEB_URL_ROOT = get_env_variable("DOC_WEB_URL_ROOT", "https://www.serviziterritoriali-asstmilano.it/servizi/vaccinazioni/")
+CACHE_DIR = project_root / get_env_variable("CACHE_DIR", "cache")
+
+# Database Configuration
+APP_NAME = "VaxTalkAssistant"
+SQL_ASYNC_DRIVER = get_env_variable("SQL_ASYNC_DRIVER", "aiosqlite")
+DB_NAME = CACHE_DIR / get_env_variable("DB_NAME", "vaxtalk_sessions.db")
+DB_URL = f"sqlite+{SQL_ASYNC_DRIVER}:///{DB_NAME}"  # Local SQLite file
+
+# RAG Configuration
+RAG_MAX_PAGES = get_env_int("RAG_MAX_PAGES", 10)
+RAG_MAX_DEPTH = get_env_int("RAG_MAX_DEPTH", 2)
+RAG_CHUNK_SIZE = get_env_int("RAG_CHUNK_SIZE", 800)
+RAG_CHUNK_OVERLAP = get_env_int("RAG_CHUNK_OVERLAP", 200)
+RAG_RETRIEVAL_K = get_env_int("RAG_RETRIEVAL_K", 5)
+
+# API Retry Configuration
+RETRY_ATTEMPTS = get_env_int("RETRY_ATTEMPTS", 3)
+RETRY_INITIAL_DELAY = get_env_int("RETRY_INITIAL_DELAY", 1)
+RETRY_HTTP_STATUS_CODES = get_env_list("RETRY_HTTP_STATUS_CODES", [429, 500, 503, 504])
 
 ######################################
 ## RAG KNOWLEDGE BASE SETUP
@@ -54,8 +78,10 @@ print("✅ Knowledge base initialized")
 rag_kb.build_knowledge_base(
     pdf_folder=DOC_FOLDER_PATH,
     root_url=DOC_WEB_URL_ROOT,
-    max_pages=10,
-    max_depth=2,
+    max_pages=RAG_MAX_PAGES,
+    max_depth=RAG_MAX_DEPTH,
+    chunk_size=RAG_CHUNK_SIZE,
+    chunk_overlap=RAG_CHUNK_OVERLAP,
     use_cache=True,
 )
 
@@ -74,17 +100,30 @@ print(f"  Embedding shape: {stats['embedding_shape']}")
 
 # Configure retry settings for API calls
 retry_config = types.HttpRetryOptions(
-    attempts=3,
-    initial_delay=1,
-    http_status_codes=[429, 500, 503, 504]
+    attempts=RETRY_ATTEMPTS,
+    initial_delay=RETRY_INITIAL_DELAY,
+    http_status_codes=RETRY_HTTP_STATUS_CODES
 )
 
 ######################################
 ## RAG AGENT
 ######################################
 
+# Create retrieval function with configured k parameter
+def retrieve_info(query: str) -> str:
+    """
+    Retrieve relevant vaccine information from the knowledge base.
+
+    Args:
+        query: The user's question about vaccines
+
+    Returns:
+        Formatted string with relevant information and sources
+    """
+    return rag_kb.retrieve(query, k=RAG_RETRIEVAL_K)
+
 # Create retrieval tool from the knowledge base
-rag_tool = FunctionTool(rag_kb.retrieve)
+rag_tool = FunctionTool(retrieve_info)
 
 # Define agent instruction
 prompt_rag = """You are a helpful assistant for vaccine information.
@@ -102,7 +141,7 @@ When the user asks a question:
 rag_agent = Agent(
     name="RAG_Vaccine_Informer",
     model=Gemini(
-        model="gemini-2.5-flash-lite",
+        model=MODEL_RAG,
         retry_options=retry_config
     ),
     instruction=prompt_rag,
@@ -142,7 +181,7 @@ prompt_sentiment = """You are a sentiment analysis assistant."""
 sentiment_agent = Agent(
     name="sentiment_analysis",
     model=Gemini(
-        model="gemini-2.5-flash-lite",
+        model=MODEL_SENTIMENT,
         retry_options=retry_config
     ),
     instruction=prompt_sentiment,
@@ -180,7 +219,7 @@ When replying to the User, consider that we performed a sentiment analysis on th
 aggregator_agent = Agent(
     name="AggregatorAgent",
     model=Gemini(
-        model="gemini-2.5-flash-lite",
+        model=MODEL_AGGREGATOR,
         retry_options=retry_config
     ),
     # It uses placeholders to inject the outputs from the parallel agents, which are now in the session state.

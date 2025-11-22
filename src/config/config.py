@@ -5,14 +5,40 @@ from dotenv import load_dotenv
 
 def load_env_variables():
     secret_path = Path("../.env")
-    print("Looking for dev.env at:", secret_path.resolve())
+    print("Looking for .env at:", secret_path.resolve())
     if secret_path.exists():
         load_dotenv(secret_path)
-        print("Loaded environment variables from dev.env")
+        print("Loaded environment variables from .env")
+    else:
+        # Try loading from current directory
+        load_dotenv()
 
 
-def get_env_variable(key: str) -> str:
-    value = os.getenv(key)
-    if not value:
+def get_env_variable(key: str, default: str | None = None) -> str:
+    """Get environment variable with optional default value."""
+    value = os.getenv(key, default)
+    if value is None:
         raise ValueError(f"{key} not found in environment variables.")
     return value
+
+
+def get_env_int(key: str, default: int) -> int:
+    """Get environment variable as integer with default value."""
+    value = os.getenv(key)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        raise ValueError(f"{key} must be an integer, got: {value}")
+
+
+def get_env_list(key: str, default: list[int]) -> list[int]:
+    """Get environment variable as list of integers with default value."""
+    value = os.getenv(key)
+    if value is None:
+        return default
+    try:
+        return [int(x.strip()) for x in value.split(',')]
+    except ValueError:
+        raise ValueError(f"{key} must be comma-separated integers, got: {value}")

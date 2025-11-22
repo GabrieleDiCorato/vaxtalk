@@ -55,6 +55,8 @@ class RagKnowledgeBase:
         root_url: Optional[str] = None,
         max_pages: int = 100,
         max_depth: int = 3,
+        chunk_size: int = 800,
+        chunk_overlap: int = 200,
         use_cache: bool = True
     ) -> None:
         """
@@ -65,6 +67,8 @@ class RagKnowledgeBase:
             root_url: Starting URL for web crawling
             max_pages: Maximum number of web pages to crawl
             max_depth: Maximum crawl depth from root URL
+            chunk_size: Number of words per chunk
+            chunk_overlap: Number of overlapping words between chunks
             use_cache: Whether to use cached embeddings if available
         """
         # Try to load from cache
@@ -80,7 +84,11 @@ class RagKnowledgeBase:
 
             # Load PDFs if folder provided
             if pdf_folder:
-                pdf_chunks = PdfHandler.load_pdfs_from_folder(str(pdf_folder))
+                pdf_chunks = PdfHandler.load_pdfs_from_folder(
+                    str(pdf_folder),
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap
+                )
                 all_chunks.extend(pdf_chunks)
                 current_id = pdf_chunks[-1].id + 1 if pdf_chunks else 0
 
@@ -90,6 +98,8 @@ class RagKnowledgeBase:
                     root_url=root_url,
                     max_pages=max_pages,
                     max_depth=max_depth,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
                     start_id=current_id
                 )
                 all_chunks.extend(web_chunks)

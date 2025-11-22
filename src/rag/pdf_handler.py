@@ -63,12 +63,16 @@ class PdfHandler:
         return chunks
 
     @staticmethod
-    def load_pdfs_from_folder(folder_path: str) -> list[DocumentChunk]:
+    def load_pdfs_from_folder(folder_path: str,
+                              chunk_size: int = 800,
+                              chunk_overlap: int = 200) -> list[DocumentChunk]:
         """
         Reads all PDFs in a folder and converts them to chunks.
 
         Args:
             folder_path: Path to folder containing PDF files
+            chunk_size: Number of words per chunk
+            chunk_overlap: Number of overlapping words between chunks
 
         Returns:
             List of DocumentChunk objects from all PDFs
@@ -99,6 +103,8 @@ class PdfHandler:
                     text=full_text,
                     source=full_path,
                     doc_type=DocType.PDF,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
                     start_id=current_id
                 )
                 all_chunks.extend(chunks)

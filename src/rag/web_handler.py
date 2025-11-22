@@ -91,7 +91,9 @@ class WebHandler:
     def crawl_website(root_url: str,
                       max_pages: int = 100,
                       max_depth: int = 3,
-                      start_id: int = 0) -> list[DocumentChunk]:
+                      start_id: int = 0,
+                      chunk_size: int = 800,
+                      chunk_overlap: int = 200) -> list[DocumentChunk]:
         """
         Crawl a website and extract text chunks from all pages.
 
@@ -103,6 +105,8 @@ class WebHandler:
             max_pages: Maximum number of pages to visit
             max_depth: Maximum link depth from root
             start_id: Starting ID for chunks
+            chunk_size: Number of words per chunk
+            chunk_overlap: Number of overlapping words between chunks
 
         Returns:
             List of DocumentChunk objects from all crawled pages
@@ -140,6 +144,8 @@ class WebHandler:
                         text=text,
                         source=url,
                         doc_type=DocType.WEB,
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
                         start_id=current_id
                     )
                     all_chunks.extend(chunks)

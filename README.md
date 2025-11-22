@@ -47,12 +47,39 @@ VaxTalk assists users with vaccine-related questions by:
 
 3. **Configure environment variables**
 
-   Create a `.env` file in the project root. You can duplicate the `.env.template` file and create your custom configuration.
-   ```env
-   GOOGLE_API_KEY=your_google_api_key_here
+   Create a `.env` file in the project root (or copy from `.env.example`):
+   ```bash
+   cp .env.example .env
    ```
 
-   Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+   Edit the `.env` file with your configuration:
+   ```env
+   # Required: Get your API key from https://aistudio.google.com/app/apikey
+   GOOGLE_API_KEY=your_google_api_key_here
+
+   # Model Configuration (optional - defaults shown)
+   MODEL_RAG=gemini-2.5-flash-lite           # Model for RAG retrieval agent
+   MODEL_SENTIMENT=gemini-2.5-flash-lite     # Model for sentiment analysis
+   MODEL_AGGREGATOR=gemini-2.5-flash-lite    # Model for response synthesis
+
+   # RAG Settings (optional - defaults shown)
+   RAG_MAX_PAGES=10          # Max web pages to crawl
+   RAG_MAX_DEPTH=2           # Max crawl depth
+   RAG_CHUNK_SIZE=800        # Words per chunk
+   RAG_CHUNK_OVERLAP=200     # Overlapping words
+   RAG_RETRIEVAL_K=5         # Number of results to retrieve
+
+   # Paths (optional - defaults shown)
+   DOC_FOLDER_PATH=src/Doc_vaccini
+   DOC_WEB_URL_ROOT=https://www.serviziterritoriali-asstmilano.it/servizi/vaccinazioni/
+   CACHE_DIR=cache
+   DB_NAME=vaxtalk_sessions.db
+
+   # API Retry Configuration (optional - defaults shown)
+   RETRY_ATTEMPTS=3
+   RETRY_INITIAL_DELAY=1
+   RETRY_HTTP_STATUS_CODES=429,500,503,504
+   ```
 
 4. **Prepare document sources** (optional)
 
