@@ -61,6 +61,8 @@ VaxTalk assists users with vaccine-related questions by:
    MODEL_RAG=gemini-2.5-flash-lite           # Model for RAG retrieval agent
    MODEL_SENTIMENT=gemini-2.5-flash-lite     # Model for sentiment analysis
    MODEL_AGGREGATOR=gemini-2.5-flash-lite    # Model for response synthesis
+   MODEL_SAFETY_CHECK=gemini-2.5-flash-lite  # Model for safety check agent
+   MODEL_REFINER=gemini-2.5-flash-lite       # Model for answer refiner agent
 
    # RAG Settings (optional - defaults shown)
    RAG_MAX_PAGES=10          # Max web pages to crawl
