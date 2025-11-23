@@ -189,7 +189,7 @@ sentiment_agent = Agent(
     instruction=prompt_sentiment,
     tools=[save_sentiment],
     output_key="sentiment_output",  # The result will be stored with this key.
-    output_schema=SentimentOutput,  # Define the expected output schema.
+    #output_schema=SentimentOutput,  # Define the expected output schema.
 )
 
 print("✅ sentiment_agent created.")
@@ -278,7 +278,13 @@ def exit_loop():
 print("✅ exit_loop function created.")
 
 refiner_prompt = """You are an answer refiner, the last step in ensuring quality and safety for a vaccine information response.
-You have access to the following inputs:
+You have access to the response of an expert assistant, as well as a critique from a safety enforcer agent.
+
+Your task is to analyze the critique.
+    - IF the critique is EXACTLY "APPROVED", you MUST call the `exit_loop` function and nothing else.
+    - OTHERWISE, rewrite the story draft to fully incorporate the feedback from the critique.
+Always aim to improve clarity, accuracy, and safety based on the critique provided.
+It is crucial to keep all the provided sources and citations in your refined answer.
 
 <response candidate>
  {aggregator_output}
@@ -287,10 +293,6 @@ You have access to the following inputs:
 <critique>
 {critique}
 </critique>
-
-Your task is to analyze the critique.
-    - IF the critique is EXACTLY "APPROVED", you MUST call the `exit_loop` function and nothing else.
-    - OTHERWISE, rewrite the story draft to fully incorporate the feedback from the critique.
 """
 
 # This agent refines the answer based on the critique from the SafetyCheckAgent. It calls the exit_loop function if the critique is "APPROVED".
@@ -324,7 +326,7 @@ answer_refinement_loop = LoopAgent(
 
 # This SequentialAgent defines the high-level workflow: run the parallel team first, then run the aggregator, then the answer refinement loop.
 root_agent = SequentialAgent(
-    name="ResearchSystem",
+    name="VaccineChatbotRootAgent",
     sub_agents=[parallel_rag_sentiment_agent, aggregator_agent, answer_refinement_loop],
 )
 
@@ -351,3 +353,7 @@ application = App(
 )
 
 runner = Runner(app=application, session_service=session_service)
+
+# Export root_agent for ADK web launcher
+# This is required so 'adk web' can find and load the agent
+__all__ = ["root_agent", "application", "runner"]
