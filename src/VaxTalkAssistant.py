@@ -172,23 +172,37 @@ print("✅ RAG Agent configured")
 # Test: we could use a tool to save sentiment in session state.
 @FunctionTool
 def save_sentiment(
-    tool_context: ToolContext, sentiment: SentimentOutput
+    tool_context: ToolContext, sentiment: SentimentOutput, reason: str = ""
 ) -> dict[str, str]:
     """
     Tool to record and save the sentiment analysis result into session state.
 
     Args:
         sentiment (SentimentOutput): The sentiment analysis result to be saved.
+        reason (str): The reason for flagging the sentiment, if any.
+
+    Example:
+        save_sentiment(sentiment=SentimentOutput(frustration=0.8, confusion=0.2, satisfaction=0.3, anxiety=0.5), reason="User expressed high frustration about vaccine side effects.")
     """
     # Write to session state using the 'user:' prefix for user data
     tool_context.state["sentiment"] = sentiment
+    tool_context.state["flag_reason"] = reason
 
     return {"status": "success"}
 
 
 print("✅ Sentiment Tools created.")
 
-prompt_sentiment = """You are a sentiment analysis assistant."""
+prompt_sentiment = """You are an expert at analyzing user sentiment based on their queries.
+Your task is to evaluate the user's input and determine their sentiment regarding vaccine information.
+
+<User query>
+{{session.state['user:input']}}
+</User query>
+
+If the user is particularly frustrated, confused, anxious, or dissatisfied about vaccination information,
+flag these sentiments using the save_sentiment tool.
+"""
 
 sentiment_agent = Agent(
     name="sentiment_analysis",
