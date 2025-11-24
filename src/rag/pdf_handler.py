@@ -8,6 +8,9 @@ for use in a Retrieval-Augmented Generation (RAG) system.
 import os
 from pypdf import PdfReader
 from src.model.document_chunk import DocumentChunk, DocType
+from src.config.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class PdfHandler:
@@ -81,7 +84,7 @@ class PdfHandler:
         current_id = 0
 
         if not os.path.exists(folder_path):
-            print(f"[PDF] Folder not found: {folder_path}")
+            logger.error("[PDF] Folder not found: %s", folder_path)
             return []
 
         for filename in os.listdir(folder_path):
@@ -89,7 +92,7 @@ class PdfHandler:
                 continue
 
             full_path = os.path.join(folder_path, filename)
-            print(f"[PDF] Loading: {full_path}")
+            logger.info("[PDF] Loading: %s", full_path)
 
             try:
                 reader = PdfReader(full_path)
@@ -111,7 +114,7 @@ class PdfHandler:
                 current_id = all_chunks[-1].id + 1 if all_chunks else current_id
 
             except Exception as e:
-                print(f"[PDF] ERROR on {full_path}: {e}")
+                logger.error("[PDF] ERROR on %s: %s", full_path, e)
 
-        print(f"[PDF] Total chunks from PDFs: {len(all_chunks)}")
+        logger.info("[PDF] Total chunks from PDFs: %s", len(all_chunks))
         return all_chunks

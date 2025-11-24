@@ -17,10 +17,9 @@ from google.genai import types
 
 # Project Imports
 from src.config import load_env_variables, get_env_variable, get_env_int, get_env_list
+from src.config.logging_config import setup_logging, get_logger
 from src.model import SentimentOutput
 from src.rag.rag import RagKnowledgeBase
-
-print("✅ Project imports loaded")
 
 
 ######################################
@@ -29,7 +28,11 @@ print("✅ Project imports loaded")
 
 # Get project root relative to this file's location
 project_root = Path(__file__).resolve().parent.parent
-print(f"📂 Project root set to: {project_root}")
+
+# Setup logging before any other operations
+logger = setup_logging(log_dir=project_root / "logs", log_level="INFO")
+logger.info("✅ Project imports loaded")
+logger.info("📂 Project root set to: %s", project_root)
 
 ######################################
 ## ENV VARIABLES
@@ -37,7 +40,7 @@ print(f"📂 Project root set to: {project_root}")
 
 load_env_variables(project_root / ".env")
 GOOGLE_API_KEY = get_env_variable("GOOGLE_API_KEY")
-print(f"✅ API key loaded")
+logger.info("✅ API key loaded")
 
 ######################################
 ## CONFIGURATION
@@ -53,9 +56,9 @@ MODEL_REFINER = get_env_variable("MODEL_REFINER", "gemini-2.5-flash-lite")
 
 # Paths & Directories
 DOC_FOLDER_PATH = project_root / get_env_variable("DOC_FOLDER_PATH", "docs")
-print(f"📂 Document folder path set to: {DOC_FOLDER_PATH}")
+logger.info("📂 Document folder path set to: %s", DOC_FOLDER_PATH)
 CACHE_DIR = project_root / get_env_variable("CACHE_DIR", "cache")
-print(f"📂 Cache directory set to: {CACHE_DIR}")
+logger.info("📂 Cache directory set to: %s", CACHE_DIR)
 DOC_WEB_URL_ROOT = get_env_variable("DOC_WEB_URL_ROOT", "https://www.serviziterritoriali-asstmilano.it/servizi/vaccinazioni/")
 
 # Database Configuration
@@ -84,7 +87,7 @@ rag_kb = RagKnowledgeBase(
     api_key=GOOGLE_API_KEY,
     cache_dir=CACHE_DIR
 )
-print("✅ Knowledge base initialized")
+logger.info("✅ Knowledge base initialized")
 
 # Build knowledge base from PDFs and website
 rag_kb.build_knowledge_base(
@@ -99,9 +102,9 @@ rag_kb.build_knowledge_base(
 
 # Display statistics
 stats = rag_kb.get_stats()
-print(f"\n📊 Knowledge Base Stats:")
-print(f"  Chunks: {stats['num_chunks']}")
-print(f"  Embedding shape: {stats['embedding_shape']}")
+logger.info("📊 Knowledge Base Stats:")
+logger.info("  Chunks: %s", stats['num_chunks'])
+logger.info("  Embedding shape: %s", stats['embedding_shape'])
 
 # Clear cache to force rebuild
 # rag_kb.clear_cache()
@@ -161,7 +164,7 @@ rag_agent = Agent(
     output_key="rag_output",
 )
 
-print("✅ RAG Agent configured")
+logger.info("✅ RAG Agent configured")
 
 
 ######################################
@@ -185,7 +188,7 @@ def save_sentiment(
     return {"status": "success"}
 
 
-print("✅ Sentiment Tools created.")
+logger.info("✅ Sentiment Tools created.")
 
 prompt_sentiment = """You are an expert at analyzing user sentiment based on their queries.
 Your task is to evaluate the user's input and determine their sentiment regarding vaccine information.
@@ -210,7 +213,7 @@ sentiment_agent = Agent(
     #output_schema=SentimentOutput,  # Define the expected output schema.
 )
 
-print("✅ sentiment_agent created.")
+logger.info("✅ sentiment_agent created.")
 
 
 ######################################
@@ -258,7 +261,7 @@ draft_composer_agent = Agent(
     output_key="draft_response",
 )
 
-print("✅ DraftComposerAgent configured")
+logger.info("✅ DraftComposerAgent configured")
 
 
 ######################################
@@ -315,7 +318,7 @@ def flag_for_human_review(
     tool_context.state["flag_severity"] = severity
 
     # In production, this could trigger a notification or queue system
-    print(f"⚠️ FLAGGED FOR REVIEW [{severity}]: {reason}")
+    logger.warning("⚠️ FLAGGED FOR REVIEW [%s]: %s", severity, reason)
 
     return {"status": "flagged", "severity": severity}
 
@@ -331,7 +334,7 @@ safety_check_agent = Agent(
     output_key="final_response",
 )
 
-print("✅ SafetyCheckAgent configured")
+logger.info("✅ SafetyCheckAgent configured")
 
 
 ######################################
@@ -347,7 +350,7 @@ aggregator_with_safety = SequentialAgent(
     ],
 )
 
-print("✅ AggregatorWithSafety configured")
+logger.info("✅ AggregatorWithSafety configured")
 
 
 ######################################
@@ -365,11 +368,11 @@ root_agent = SequentialAgent(
     name="VaccineChatbotRootAgent",
     sub_agents=[
         parallel_rag_sentiment_agent,  # Parallel: RAG + Sentiment
-        aggregator_with_safety,         # Sequential: Draft → Safety
+        aggregator_with_safety,        # Sequential: Draft → Safety
     ],
 )
 
-print("✅ Root agent workflow configured")
+logger.info("✅ Root agent workflow configured")
 
 
 ######################################
@@ -411,14 +414,14 @@ def main():
     # Change to project root directory (already computed at module level)
     os.chdir(project_root)
 
-    print(f"🚀 Launching VaxTalk Assistant...")
-    print(f"📂 Working directory: {project_root}")
+    logger.info("🚀 Launching VaxTalk Assistant...")
+    logger.info("📂 Working directory: %s", project_root)
 
     # Build the adk web command with all parameters
     cmd = [
         "adk", "web",
         "--port", "42423",
-        "--session_service_uri", DB_URL,
+        "--session_service_uri", f'"{DB_URL}"',
         "--logo-text", APP_NAME,
         "--logo-image-url", "https://drive.google.com/file/d/1ajO7VOLybRS6lVEKoTiBy6YrUUlY"
     ]
@@ -426,10 +429,10 @@ def main():
     try:
         subprocess.run(" ".join(cmd), check=True)
     except subprocess.CalledProcessError as e:
-        print(f"❌ Error launching VaxTalk: {e}")
+        logger.error("❌ Error launching VaxTalk: %s", e)
         sys.exit(1)
     except KeyboardInterrupt:
-        print("\n👋 VaxTalk Assistant stopped")
+        logger.info("\n👋 VaxTalk Assistant stopped")
         sys.exit(0)
 
 

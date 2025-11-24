@@ -10,6 +10,9 @@ import requests
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from src.model.document_chunk import DocumentChunk, DocType
+from src.config.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class WebHandler:
@@ -133,7 +136,7 @@ class WebHandler:
                 continue
 
             try:
-                print(f"[WEB] Downloading ({depth}): {url}")
+                logger.info("[WEB] Downloading (%s): %s", depth, url)
                 resp = session.get(url, timeout=10)
                 if "text/html" not in resp.headers.get("Content-Type", ""):
                     continue
@@ -170,8 +173,8 @@ class WebHandler:
                 time.sleep(0.2)
 
             except Exception as e:
-                print(f"[WEB] ERROR on {url}: {e}")
+                logger.error("[WEB] ERROR on %s: %s", url, e)
 
-        print(f"[WEB] Total pages visited: {len(visited)}")
-        print(f"[WEB] Total chunks from site: {len(all_chunks)}")
+        logger.info("[WEB] Total pages visited: %s", len(visited))
+        logger.info("[WEB] Total chunks from site: %s", len(all_chunks))
         return all_chunks

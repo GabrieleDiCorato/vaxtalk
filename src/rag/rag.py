@@ -14,6 +14,9 @@ from src.model.document_chunk import DocumentChunk
 from src.rag.pdf_handler import PdfHandler
 from src.rag.web_handler import WebHandler
 from src.rag.embedding_handler import EmbeddingHandler
+from src.config.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class RagKnowledgeBase:
@@ -77,7 +80,7 @@ class RagKnowledgeBase:
 
         # Build fresh if cache is empty
         if self.embeddings.size == 0:
-            print("Building knowledge base...")
+            logger.info("Building knowledge base...")
 
             all_chunks = []
             current_id = 0
@@ -108,23 +111,23 @@ class RagKnowledgeBase:
             if all_chunks:
                 self.embeddings, self.chunks = self.embedding_handler.build_vector_index(all_chunks)
                 self.embedding_handler.save_index_to_cache(self.embeddings, self.chunks)
-                print(f"✅ Index built: {len(self.chunks)} chunks")
+                logger.info("✅ Index built: %s chunks", len(self.chunks))
             else:
-                print("⚠️ No content found")
+                logger.warning("⚠️ No content found")
         else:
-            print(f"✅ Loaded from cache: {len(self.chunks)} chunks")
+            logger.info("✅ Loaded from cache: %s chunks", len(self.chunks))
 
     def clear_cache(self) -> None:
         """Clear the cached embeddings and chunks."""
         import shutil
         if self.cache_dir.exists():
             shutil.rmtree(self.cache_dir)
-            print("✅ Cache cleared")
+            logger.info("✅ Cache cleared")
             # Reset in-memory data
             self.embeddings = np.array([])
             self.chunks = []
         else:
-            print("⚠️ No cache to clear")
+            logger.warning("⚠️ No cache to clear")
 
     def retrieve(self, query: str, k: int = 5) -> str:
         """

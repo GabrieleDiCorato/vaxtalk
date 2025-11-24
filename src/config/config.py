@@ -1,19 +1,22 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from src.config.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def load_env_variables(env_path : Path | str) -> None:
-    print("Looking for .env at:", env_path)
+    logger.info("Looking for .env at: %s", env_path)
     if Path(env_path).exists():
         load_dotenv(env_path)
-        print("Loaded environment variables from .env")
+        logger.info("Loaded environment variables from .env")
     else:
         # Try loading from current directory
-        print(f".env file not found at specified path. Trying find_dotenv...")
+        logger.warning(".env file not found at specified path. Trying find_dotenv...")
         found = load_dotenv()
         if not found:
-            print("No .env file found!")
+            logger.warning("No .env file found!")
 
 
 def get_env_variable(key: str, default: str | None = None) -> str:

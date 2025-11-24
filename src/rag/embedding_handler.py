@@ -11,6 +11,9 @@ import numpy as np
 from pathlib import Path
 from google import genai
 from src.model.document_chunk import DocumentChunk
+from src.config.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class EmbeddingHandler:
@@ -55,7 +58,7 @@ class EmbeddingHandler:
         with open(self.chunks_cache_file, 'wb') as f:
             pickle.dump(chunks, f)
 
-        print(f"✅ Index cached to {self.cache_dir}")
+        logger.info("✅ Index cached to %s", self.cache_dir)
 
     def load_index_from_cache(self) -> tuple[np.ndarray, list[DocumentChunk]]:
         """
@@ -74,10 +77,10 @@ class EmbeddingHandler:
             with open(self.chunks_cache_file, 'rb') as f:
                 chunks = pickle.load(f)
 
-            print(f"✅ Index loaded from cache: {len(chunks)} chunks")
+            logger.info("✅ Index loaded from cache: %s chunks", len(chunks))
             return embeddings, chunks
         except Exception as e:
-            print(f"⚠️ Error loading cache: {e}")
+            logger.warning("⚠️ Error loading cache: %s", e)
             return np.array([]), []
 
     def embed_texts(self, texts: list[str], batch_size: int = 64) -> np.ndarray:
@@ -99,7 +102,7 @@ class EmbeddingHandler:
         try:
             for i in range(0, len(texts), batch_size):
                 batch = texts[i:i + batch_size]
-                print(f"[EMB] Batch {i}–{i+len(batch)-1} of {len(texts)}")
+                logger.debug("[EMB] Batch %s–%s of %s", i, i+len(batch)-1, len(texts))
 
                 # Gemini embedding call
                 response = self.client.models.embed_content(
@@ -116,7 +119,7 @@ class EmbeddingHandler:
             return np.array(all_vectors, dtype=np.float32)
 
         except Exception as e:
-            print(f"❌ Error during embedding: {e}")
+            logger.error("❌ Error during embedding: %s", e)
             raise
 
     def build_vector_index(self, chunks: list[DocumentChunk]) -> tuple[np.ndarray, list[DocumentChunk]]:
@@ -129,10 +132,10 @@ class EmbeddingHandler:
         Returns:
             Tuple of (embeddings array, chunks list)
         """
-        print("[INDEX] Calculating embeddings for all chunks...")
+        logger.info("[INDEX] Calculating embeddings for all chunks...")
         texts = [c.content for c in chunks]
         embeddings = self.embed_texts(texts)
-        print(f"[INDEX] Embeddings shape: {embeddings.shape}")
+        logger.info("[INDEX] Embeddings shape: %s", embeddings.shape)
         return embeddings, chunks
 
     @staticmethod

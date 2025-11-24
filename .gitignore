@@ -215,3 +215,4 @@ src/Chatbot_test.py
 # Files
 docs/
 cache/
+logs/
