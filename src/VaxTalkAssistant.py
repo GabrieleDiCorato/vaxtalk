@@ -22,11 +22,20 @@ from src.rag.rag import RagKnowledgeBase
 
 print("✅ Project imports loaded")
 
+
+######################################
+## PROJECT ROOT
+######################################
+
+# Get project root relative to this file's location
+project_root = Path(__file__).resolve().parent.parent
+print(f"📂 Project root set to: {project_root}")
+
 ######################################
 ## ENV VARIABLES
 ######################################
 
-load_env_variables()
+load_env_variables(project_root / ".env")
 GOOGLE_API_KEY = get_env_variable("GOOGLE_API_KEY")
 print(f"✅ API key loaded")
 
@@ -34,7 +43,6 @@ print(f"✅ API key loaded")
 ## CONFIGURATION
 ######################################
 
-project_root = Path.cwd().parent
 
 # Model Configuration
 MODEL_RAG = get_env_variable("MODEL_RAG", "gemini-2.5-flash-lite")
@@ -44,9 +52,11 @@ MODEL_SAFETY_CHECK = get_env_variable("MODEL_SAFETY_CHECK", "gemini-2.5-flash-li
 MODEL_REFINER = get_env_variable("MODEL_REFINER", "gemini-2.5-flash-lite")
 
 # Paths & Directories
-DOC_FOLDER_PATH = project_root / get_env_variable("DOC_FOLDER_PATH", "src/Doc_vaccini")
-DOC_WEB_URL_ROOT = get_env_variable("DOC_WEB_URL_ROOT", "https://www.serviziterritoriali-asstmilano.it/servizi/vaccinazioni/")
+DOC_FOLDER_PATH = project_root / get_env_variable("DOC_FOLDER_PATH", "docs")
+print(f"📂 Document folder path set to: {DOC_FOLDER_PATH}")
 CACHE_DIR = project_root / get_env_variable("CACHE_DIR", "cache")
+print(f"📂 Cache directory set to: {CACHE_DIR}")
+DOC_WEB_URL_ROOT = get_env_variable("DOC_WEB_URL_ROOT", "https://www.serviziterritoriali-asstmilano.it/servizi/vaccinazioni/")
 
 # Database Configuration
 APP_NAME = "VaxTalkAssistant"
@@ -384,23 +394,21 @@ def main():
     """
     import subprocess
     import sys
-
-    # Change to project root directory
     import os
-    workdir = Path.cwd().parent
-    os.chdir(workdir)
+
+    # Change to project root directory (already computed at module level)
+    os.chdir(project_root)
 
     print(f"🚀 Launching VaxTalk Assistant...")
-    print(f"📂 Working directory: {workdir}")
+    print(f"📂 Working directory: {project_root}")
 
     # Build the adk web command with all parameters
     cmd = [
         "adk", "web",
         "--port", "42423",
-        "--session_service_uri", "sqlite+aiosqlite:///cache/vaxtalk_sessions.db",
-        "--logo-text", "VaxTalkAssistant",
-        "--logo-image-url", "https://drive.google.com/file/d/1ajO7VOLybRS6lVEKoTiBy6YrUUlY",
-        "vaxtalk"
+        "--session_service_uri", DB_URL,
+        "--logo-text", APP_NAME,
+        "--logo-image-url", "https://drive.google.com/file/d/1ajO7VOLybRS6lVEKoTiBy6YrUUlY"
     ]
 
     try:
