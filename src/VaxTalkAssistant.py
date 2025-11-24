@@ -172,22 +172,16 @@ print("✅ RAG Agent configured")
 # Test: we could use a tool to save sentiment in session state.
 @FunctionTool
 def save_sentiment(
-    tool_context: ToolContext, sentiment: SentimentOutput, reason: str = ""
+    tool_context: ToolContext, sentiment: str
 ) -> dict[str, str]:
     """
     Tool to record and save the sentiment analysis result into session state.
 
     Args:
-        sentiment (SentimentOutput): The sentiment analysis result to be saved.
-        reason (str): The reason for flagging the sentiment, if any.
-
-    Example:
-        save_sentiment(sentiment=SentimentOutput(frustration=0.8, confusion=0.2, satisfaction=0.3, anxiety=0.5), reason="User expressed high frustration about vaccine side effects.")
+        sentiment (str): The sentiment analysis result to be saved.
     """
-    # Write to session state using the 'user:' prefix for user data
-    tool_context.state["sentiment"] = sentiment
-    tool_context.state["flag_reason"] = reason
 
+    tool_context.state["sentiment"] = sentiment
     return {"status": "success"}
 
 
@@ -234,18 +228,22 @@ Your task is to compose a comprehensive draft response.
 {rag_output}
 </RAG Knowledge Base Output>
 
+{{#if sentiment_output}}
 <User Sentiment Analysis>
-{sentiment_output}
+{sentiment_output?}
 </User Sentiment Analysis>
+
+Adapt your response to user sentiment:
+- High frustration → Acknowledge concerns explicitly and be extra clear
+- High confusion → Break down into simpler terms with examples
+- Low satisfaction → Provide additional reassurance and resources
+- High anxiety → Emphasize consulting healthcare providers
+{{/if}}
 
 Compose a response that:
 1. Answers based ONLY on the RAG output
 2. Includes all source citations that the RAG output provided. Do not invent new ones.
-3. Adapts to user sentiment:
-   - High frustration → Acknowledge concerns explicitly and be extra clear
-   - High confusion → Break down into simpler terms with examples
-   - Low satisfaction → Provide additional reassurance and resources
-   - High anxiety → Emphasize consulting healthcare providers
+3. Be empathetic and professional in tone
 
 This draft will be reviewed for safety before delivery.
 """
