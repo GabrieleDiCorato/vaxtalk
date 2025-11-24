@@ -275,49 +275,6 @@ safety_check_agent = Agent(
     output_key="critique",
 )
 
-######################################
-## REFINER AGENT
-#####################################
-
-# This is the function that the RefinerAgent will call to exit the loop.
-@FunctionTool
-def exit_loop(tool_context: ToolContext) -> dict[str, str]:
-    """Call this function ONLY when the critique is 'APPROVED', indicating the story is finished and no more changes are needed."""
-    # Signal loop exit by setting a flag in state
-    tool_context.state["loop_exit_requested"] = True
-    return {"status": "approved", "message": "Story approved. Exiting refinement loop."}
-
-print("✅ exit_loop function created.")
-
-refiner_prompt = """You are an answer refiner, the last step in ensuring quality and safety for a vaccine information response.
-You have access to the response of an expert assistant, as well as a critique from a safety enforcer agent.
-
-Your task is to analyze the critique.
-    - IF the critique contains "APPROVED", you MUST call the `exit_loop` function and nothing else.
-    - OTHERWISE, rewrite the story draft to fully incorporate the feedback from the critique.
-Always aim to improve clarity, accuracy, and safety based on the critique provided.
-It is crucial to keep all the provided sources and citations in your refined answer.
-
-<response candidate>
- {aggregator_output}
-</response candidate>
-
-<critique>
-{critique}
-</critique>
-"""
-
-# This agent refines the answer based on the critique from the SafetyCheckAgent. It calls the exit_loop function if the critique is "APPROVED".
-refiner_agent = Agent(
-    name="RefinerAgent",
-    model=Gemini(model=MODEL_REFINER, retry_options=retry_config),
-    instruction=refiner_prompt,
-    output_key="aggregator_output",  # It overwrites the aggregator_output with the new, refined version.
-    tools=[exit_loop],
-)
-
-print("✅ refiner_agent created.")
-
 
 ######################################
 ## WORKFLOW AGENTS
@@ -329,17 +286,10 @@ parallel_rag_sentiment_agent = ParallelAgent(
     sub_agents=[sentiment_agent, rag_agent],
 )
 
-# The LoopAgent contains the agents that will run repeatedly: Safety Check -> Refiner.
-answer_refinement_loop = LoopAgent(
-    name="AnswerRefinementLoop",
-    sub_agents=[safety_check_agent, refiner_agent],
-    max_iterations=3,  # Prevents infinite loops
-)
-
-# This SequentialAgent defines the high-level workflow: run the parallel team first, then run the aggregator, then the answer refinement loop.
+# This SequentialAgent defines the high-level workflow: run the parallel team first, then run the aggregator, then the safety check.
 root_agent = SequentialAgent(
     name="VaccineChatbotRootAgent",
-    sub_agents=[parallel_rag_sentiment_agent, aggregator_agent, answer_refinement_loop],
+    sub_agents=[parallel_rag_sentiment_agent, aggregator_agent, safety_check_agent],
 )
 
 print("✅ Parallel and Sequential Agents created.")
