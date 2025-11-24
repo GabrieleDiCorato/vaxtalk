@@ -87,15 +87,32 @@ VaxTalk assists users with vaccine-related questions by:
 
    Place PDF documents in `src/Doc_vaccini/` and configure the web URL.
 
-### Running the Application Using ADK CLI
+## 🎮 Running the Application
+
+### Using UV (Recommended)
+
+The easiest way to launch VaxTalk is using the built-in uv script:
 
 ```bash
-adk web --port <PORT_NUMBER>
+uv run vaxtalk
+```
+
+This will:
+- Initialize the knowledge base
+- Start the web server on port 42423
+- Open the interface at `http://localhost:42423`
+
+### Using ADK CLI Directly
+
+Alternatively, you can use the ADK command directly:
+
+```bash
+adk web --port 42423 --session_service_uri sqlite+aiosqlite:///cache/vaxtalk_sessions.db --logo-text VaxTalkAssistant
 ```
 
 Navigate to the URL provided by the adk message.
 
-### First Run
+## 📊 First Run
 
 On first launch, the system will:
 1. Load or create the vector database cache

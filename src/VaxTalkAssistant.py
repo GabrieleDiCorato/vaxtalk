@@ -1,7 +1,6 @@
 """VaxTalkAssistant: An AI assistant for vaccine information using RAG and sentiment analysis.
 To launch the application:
-adk web --port 42423 --logo-text VaxTalk
-adk web --port 42423 --session_service_uri sqlite+aiosqlite:///cache/vaxtalk_sessions.db --logo-text VaxTalk --reload_agents --logo-image-url https://drive.google.com/file/d/1ajO7VOLybRS6lVEKoTiBy6YrUUlY
+adk web --port 42423 --session_service_uri sqlite+aiosqlite:///cache/vaxtalk_sessions.db --logo-text VaxTalkAssistant --logo-image-url https://drive.google.com/file/d/1ajO7VOLybRS6lVEKoTiBy6YrUUlY
 """
 
 from pathlib import Path
@@ -15,7 +14,6 @@ from google.adk.sessions import DatabaseSessionService
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.tool_context import ToolContext
 from google.genai import types
-from google.adk.apps.app import App
 
 # Project Imports
 from src.config import load_env_variables, get_env_variable, get_env_int, get_env_list
@@ -218,7 +216,7 @@ Your task is to compose a comprehensive draft response.
 
 Compose a response that:
 1. Answers based ONLY on the RAG output
-2. Includes all source citations
+2. Includes all source citations that the RAG output provided. Do not invent new ones.
 3. Adapts to user sentiment:
    - High frustration → Acknowledge concerns explicitly and be extra clear
    - High confusion → Break down into simpler terms with examples
@@ -365,14 +363,56 @@ events_compaction_config = EventsCompactionConfig(
     overlap_size=1,  # Keep 1 previous turn for context
 )
 
-application = App(
+vax_talk_assistant = App(
     name=APP_NAME,
     root_agent=root_agent,
     events_compaction_config=events_compaction_config,
 )
 
-runner = Runner(app=application, session_service=session_service)
+runner = Runner(app=vax_talk_assistant, session_service=session_service)
+
+
+######################################
+## MAIN ENTRY POINT
+######################################
+
+def main():
+    """Main entry point for launching VaxTalk web application.
+
+    This function launches the ADK web interface with all configured parameters.
+    It can be invoked via 'uv run vaxtalk' after installing the package.
+    """
+    import subprocess
+    import sys
+
+    # Change to project root directory
+    import os
+    workdir = Path.cwd().parent
+    os.chdir(workdir)
+
+    print(f"🚀 Launching VaxTalk Assistant...")
+    print(f"📂 Working directory: {workdir}")
+
+    # Build the adk web command with all parameters
+    cmd = [
+        "adk", "web",
+        "--port", "42423",
+        "--session_service_uri", "sqlite+aiosqlite:///cache/vaxtalk_sessions.db",
+        "--logo-text", "VaxTalkAssistant",
+        "--logo-image-url", "https://drive.google.com/file/d/1ajO7VOLybRS6lVEKoTiBy6YrUUlY",
+        "vaxtalk"
+    ]
+
+    try:
+        subprocess.run(" ".join(cmd), check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Error launching VaxTalk: {e}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\n👋 VaxTalk Assistant stopped")
+        sys.exit(0)
+
 
 # Export root_agent for ADK web launcher
 # This is required so 'adk web' can find and load the agent
-__all__ = ["root_agent", "application", "runner"]
+__all__ = ["root_agent", "vax_talk_assistant", "runner", "main"]
