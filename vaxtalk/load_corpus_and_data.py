@@ -12,7 +12,7 @@ from pathlib import Path
 # Project Imports
 from vaxtalk.config import load_env_variables, get_env_variable, get_env_int
 from vaxtalk.config.logging_config import setup_logging, get_logger
-from vaxtalk.rag.rag import RagKnowledgeBase
+from vaxtalk.rag.rag_service import RagService
 
 
 def main():
@@ -52,7 +52,7 @@ def main():
     logger.info("Web URL root: %s", DOC_WEB_URL_ROOT)
 
     # Initialize knowledge base
-    rag_kb = RagKnowledgeBase(
+    rag_kb = RagService(
         api_key=GOOGLE_API_KEY,
         cache_dir=CACHE_DIR
     )
