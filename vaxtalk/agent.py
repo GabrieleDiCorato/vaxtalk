@@ -8,16 +8,16 @@ from pathlib import Path
 # Google ADK Imports
 from google.adk.agents import Agent, SequentialAgent, ParallelAgent, LoopAgent
 from google.adk.apps.app import App, EventsCompactionConfig
-from google.adk.models.google_llm import Gemini
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.tool_context import ToolContext
-from google.genai import types
+from google.genai.types import HttpRetryOptions
 
 # Project Imports
 from vaxtalk.config import load_env_variables, get_env_variable, get_env_int, get_env_list
-from vaxtalk.config.logging_config import setup_logging, get_logger
+from vaxtalk.config.logging_config import setup_logging
+from vaxtalk.connectors.llm_connection_factory import LlmConnectionFactory
 from vaxtalk.model import SentimentOutput
 from vaxtalk.rag.rag import RagKnowledgeBase
 
@@ -114,7 +114,7 @@ logger.info("  Embedding shape: %s", stats['embedding_shape'])
 ######################################
 
 # Configure retry settings for API calls
-retry_config = types.HttpRetryOptions(
+retry_config = HttpRetryOptions(
     attempts=RETRY_ATTEMPTS,
     initial_delay=RETRY_INITIAL_DELAY,
     http_status_codes=RETRY_HTTP_STATUS_CODES
@@ -155,9 +155,9 @@ When the user asks a question:
 # Create the agent
 rag_agent = Agent(
     name="RAG_Vaccine_Informer",
-    model=Gemini(
-        model=MODEL_RAG,
-        retry_options=retry_config
+    model=LlmConnectionFactory.get_llm_connection(
+        model_full_name=MODEL_RAG,
+        retry_config=retry_config
     ),
     instruction=prompt_rag,
     tools=[rag_tool],
@@ -203,9 +203,9 @@ flag these sentiments using the save_sentiment tool.
 
 sentiment_agent = Agent(
     name="sentiment_analysis",
-    model=Gemini(
-        model=MODEL_SENTIMENT,
-        retry_options=retry_config
+    model=LlmConnectionFactory.get_llm_connection(
+        model_full_name=MODEL_SENTIMENT,
+        retry_config=retry_config
     ),
     instruction=prompt_sentiment,
     tools=[save_sentiment],
@@ -253,9 +253,9 @@ This draft will be reviewed for safety before delivery.
 
 draft_composer_agent = Agent(
     name="DraftComposerAgent",
-    model=Gemini(
-        model=MODEL_AGGREGATOR,
-        retry_options=retry_config
+    model=LlmConnectionFactory.get_llm_connection(
+        model_full_name=MODEL_AGGREGATOR,
+        retry_config=retry_config
     ),
     instruction=draft_composer_prompt,
     output_key="draft_response",
@@ -325,9 +325,9 @@ def flag_for_human_review(
 
 safety_check_agent = Agent(
     name="SafetyCheckAgent",
-    model=Gemini(
-        model=MODEL_SAFETY_CHECK,
-        retry_options=retry_config
+    model=LlmConnectionFactory.get_llm_connection(
+        model_full_name=MODEL_SAFETY_CHECK,
+        retry_config=retry_config
     ),
     instruction=safety_check_prompt,
     tools=[flag_for_human_review],
