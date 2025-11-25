@@ -24,6 +24,7 @@ dependencies = [
 
 [project.scripts]
 vaxtalk = "src.VaxTalkAssistant:main"
+load-corpus = "src.load_corpus_and_data:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]

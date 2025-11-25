@@ -59,7 +59,7 @@ DOC_FOLDER_PATH = project_root / get_env_variable("DOC_FOLDER_PATH", "docs")
 logger.info("📂 Document folder path set to: %s", DOC_FOLDER_PATH)
 CACHE_DIR = project_root / get_env_variable("CACHE_DIR", "cache")
 logger.info("📂 Cache directory set to: %s", CACHE_DIR)
-DOC_WEB_URL_ROOT = get_env_variable("DOC_WEB_URL_ROOT", "https://www.serviziterritoriali-asstmilano.it/servizi/vaccinazioni/")
+DOC_WEB_URL_ROOT = get_env_variable("DOC_WEB_URL_ROOT", None)
 
 # Database Configuration
 APP_NAME = "VaxTalkAssistant"
@@ -68,8 +68,8 @@ DB_NAME = CACHE_DIR / get_env_variable("DB_NAME", "vaxtalk_sessions.db")
 DB_URL = f"sqlite+{SQL_ASYNC_DRIVER}:///{DB_NAME}"  # Local SQLite file
 
 # RAG Configuration
-RAG_MAX_PAGES = get_env_int("RAG_MAX_PAGES", 10)
-RAG_MAX_DEPTH = get_env_int("RAG_MAX_DEPTH", 2)
+RAG_MAX_PAGES = get_env_int("RAG_MAX_PAGES", 100)
+RAG_MAX_DEPTH = get_env_int("RAG_MAX_DEPTH", 5)
 RAG_CHUNK_SIZE = get_env_int("RAG_CHUNK_SIZE", 800)
 RAG_CHUNK_OVERLAP = get_env_int("RAG_CHUNK_OVERLAP", 200)
 RAG_RETRIEVAL_K = get_env_int("RAG_RETRIEVAL_K", 5)

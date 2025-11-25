@@ -8,7 +8,6 @@ processing, embedding generation, and retrieval - without any ADK dependencies.
 
 import numpy as np
 from pathlib import Path
-from typing import Optional
 
 from src.model.document_chunk import DocumentChunk
 from src.rag.pdf_handler import PdfHandler
@@ -54,8 +53,8 @@ class RagKnowledgeBase:
 
     def build_knowledge_base(
         self,
-        pdf_folder: Optional[str | Path] = None,
-        root_url: Optional[str] = None,
+        pdf_folder: str | Path | None = None,
+        root_url: str | None = None,
         max_pages: int = 100,
         max_depth: int = 3,
         chunk_size: int = 800,

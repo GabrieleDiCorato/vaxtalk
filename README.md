@@ -47,45 +47,41 @@ VaxTalk assists users with vaccine-related questions by:
 
 3. **Configure environment variables**
 
-   Create a `.env` file in the project root (or copy from `.env.example`):
+   Copy the `.env.example` file to create your own `.env` file:
    ```bash
    cp .env.example .env
    ```
 
-   Edit the `.env` file with your configuration:
-   ```env
-   # Required: Get your API key from https://aistudio.google.com/app/apikey
-   GOOGLE_API_KEY=your_google_api_key_here
+   Edit the `.env` file with your configuration. See `.env.example` for detailed documentation and examples of all available options.
 
-   # Model Configuration (optional - defaults shown)
-   MODEL_RAG=gemini-2.5-flash-lite           # Model for RAG retrieval agent
-   MODEL_SENTIMENT=gemini-2.5-flash-lite     # Model for sentiment analysis
-   MODEL_AGGREGATOR=gemini-2.5-flash-lite    # Model for response synthesis
-   MODEL_SAFETY_CHECK=gemini-2.5-flash-lite  # Model for safety check agent
-   MODEL_REFINER=gemini-2.5-flash-lite       # Model for answer refiner agent
+4. **Prepare document sources**
 
-   # RAG Settings (optional - defaults shown)
-   RAG_MAX_PAGES=10          # Max web pages to crawl
-   RAG_MAX_DEPTH=2           # Max crawl depth
-   RAG_CHUNK_SIZE=800        # Words per chunk
-   RAG_CHUNK_OVERLAP=200     # Overlapping words
-   RAG_RETRIEVAL_K=5         # Number of results to retrieve
+   Place your PDF documents in the folder specified by `DOC_FOLDER_PATH` (e.g., `docs/`) and configure `DOC_WEB_URL_ROOT` if you want to crawl a website.
 
-   # Paths (optional - defaults shown)
-   DOC_FOLDER_PATH=src/Doc_vaccini
-   DOC_WEB_URL_ROOT=https://www.serviziterritoriali-asstmilano.it/servizi/vaccinazioni/
-   CACHE_DIR=cache
-   DB_NAME=vaxtalk_sessions.db
+## 🔄 Loading the Corpus
 
-   # API Retry Configuration (optional - defaults shown)
-   RETRY_ATTEMPTS=3
-   RETRY_INITIAL_DELAY=1
-   RETRY_HTTP_STATUS_CODES=429,500,503,504
-   ```
+**Before first run** or when you want to refresh the knowledge base with updated documents:
 
-4. **Prepare document sources** (optional)
+```bash
+uv run load-corpus
+```
 
-   Place PDF documents in `src/Doc_vaccini/` and configure the web URL.
+This command will:
+- Clear the existing cache
+- Reload all PDF documents from your document folder
+- Crawl the configured website (if `DOC_WEB_URL_ROOT` is set)
+- Build new embeddings and save them to cache
+
+The process may take several minutes depending on:
+- Number of PDF files
+- Website size and depth
+- Your internet connection speed
+
+**When to reload the corpus:**
+- After adding or updating PDF documents
+- When the source website has been updated
+- If you change RAG configuration parameters (chunk size, overlap, etc.)
+- To troubleshoot cache-related issues
 
 ## 🎮 Running the Application
 
@@ -115,12 +111,15 @@ Navigate to the URL provided by the adk message.
 ## 📊 First Run
 
 On first launch, the system will:
-1. Load or create the vector database cache
-2. Process documents from PDFs and web sources (if cache doesn't exist)
+1. Check for existing cache in the `CACHE_DIR` folder
+2. If no cache exists, automatically build the knowledge base:
+   - Process PDF documents from `DOC_FOLDER_PATH`
+   - Crawl website from `DOC_WEB_URL_ROOT` (if configured)
+   - Generate embeddings and save to cache
 3. Initialize the SQLite session database
 4. Start the web server
 
-The knowledge base building may be slow on first run, but subsequent starts will be fast using the cache.
+**Note:** The initial knowledge base building may take several minutes if no cache exists. Subsequent starts will be fast, loading from the cached embeddings. Use `uv run load-corpus` to manually rebuild the cache when needed.
 
 
 ## 📝 Disclaimer
