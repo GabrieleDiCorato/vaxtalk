@@ -10,9 +10,9 @@ Usage:
 from pathlib import Path
 
 # Project Imports
-from src.config import load_env_variables, get_env_variable, get_env_int
-from src.config.logging_config import setup_logging, get_logger
-from src.rag.rag import RagKnowledgeBase
+from vaxtalk.config import load_env_variables, get_env_variable, get_env_int
+from vaxtalk.config.logging_config import setup_logging, get_logger
+from vaxtalk.rag.rag import RagKnowledgeBase
 
 
 def main():
@@ -30,8 +30,8 @@ def main():
 
     # Setup logging
     logger = setup_logging(log_dir=project_root / "logs", log_level="INFO")
-    logger.info("🔄 Starting corpus reload process...")
-    logger.info("📂 Project root: %s", project_root)
+    logger.info("Starting corpus reload process...")
+    logger.info("Project root: %s", project_root)
 
     # Load environment variables
     load_env_variables(project_root / ".env")
@@ -47,24 +47,24 @@ def main():
     RAG_CHUNK_SIZE = get_env_int("RAG_CHUNK_SIZE", 800)
     RAG_CHUNK_OVERLAP = get_env_int("RAG_CHUNK_OVERLAP", 200)
 
-    logger.info("📂 Document folder: %s", DOC_FOLDER_PATH)
-    logger.info("📂 Cache directory: %s", CACHE_DIR)
-    logger.info("🌐 Web URL root: %s", DOC_WEB_URL_ROOT)
+    logger.info("Document folder: %s", DOC_FOLDER_PATH)
+    logger.info("Cache directory: %s", CACHE_DIR)
+    logger.info("Web URL root: %s", DOC_WEB_URL_ROOT)
 
     # Initialize knowledge base
     rag_kb = RagKnowledgeBase(
         api_key=GOOGLE_API_KEY,
         cache_dir=CACHE_DIR
     )
-    logger.info("✅ Knowledge base initialized")
+    logger.info("Knowledge base initialized")
 
     # Clear existing cache
-    logger.info("🗑️  Clearing cache...")
+    logger.info("Clearing cache...")
     rag_kb.clear_cache()
-    logger.info("✅ Cache cleared")
+    logger.info("Cache cleared")
 
     # Rebuild knowledge base
-    logger.info("🔨 Building knowledge base from scratch...")
+    logger.info("Building knowledge base from scratch...")
     rag_kb.build_knowledge_base(
         pdf_folder=DOC_FOLDER_PATH,
         root_url=DOC_WEB_URL_ROOT,
@@ -77,12 +77,12 @@ def main():
 
     # Display statistics
     stats = rag_kb.get_stats()
-    logger.info("📊 Knowledge Base Rebuilt Successfully!")
-    logger.info("  📄 Total chunks: %s", stats['num_chunks'])
-    logger.info("  🔢 Embedding shape: %s", stats['embedding_shape'])
-    logger.info("  💾 Cache directory: %s", stats['cache_dir'])
+    logger.info("Knowledge Base Rebuilt Successfully!")
+    logger.info("  Total chunks: %s", stats['num_chunks'])
+    logger.info("  Embedding shape: %s", stats['embedding_shape'])
+    logger.info("  Cache directory: %s", stats['cache_dir'])
 
-    logger.info("✅ Corpus reload complete!")
+    logger.info("Corpus reload complete!")
     return 0
 
 

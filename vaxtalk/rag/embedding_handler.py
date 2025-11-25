@@ -10,8 +10,8 @@ import heapq
 import numpy as np
 from pathlib import Path
 from google import genai
-from src.model.document_chunk import DocumentChunk
-from src.config.logging_config import get_logger
+from vaxtalk.model.document_chunk import DocumentChunk
+from vaxtalk.config.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -29,7 +29,7 @@ class EmbeddingHandler:
     - Retrieve top-k similar chunks for a query
     """
 
-    def __init__(self, api_key: str, cache_dir: str | Path = "../cache"):
+    def __init__(self, api_key: str, cache_dir: str | Path = "../../cache"):
         """
         Initialize the EmbeddingHandler.
 
@@ -58,7 +58,7 @@ class EmbeddingHandler:
         with open(self.chunks_cache_file, 'wb') as f:
             pickle.dump(chunks, f)
 
-        logger.info("✅ Index cached to %s", self.cache_dir)
+        logger.info("Index cached to %s", self.cache_dir)
 
     def load_index_from_cache(self) -> tuple[np.ndarray, list[DocumentChunk]]:
         """
@@ -77,10 +77,10 @@ class EmbeddingHandler:
             with open(self.chunks_cache_file, 'rb') as f:
                 chunks = pickle.load(f)
 
-            logger.info("✅ Index loaded from cache: %s chunks", len(chunks))
+            logger.info("Index loaded from cache: %s chunks", len(chunks))
             return embeddings, chunks
         except Exception as e:
-            logger.warning("⚠️ Error loading cache: %s", e)
+            logger.warning("Error loading cache: %s", e)
             return np.array([]), []
 
     def embed_texts(self, texts: list[str], batch_size: int = 64) -> np.ndarray:
@@ -119,7 +119,7 @@ class EmbeddingHandler:
             return np.array(all_vectors, dtype=np.float32)
 
         except Exception as e:
-            logger.error("❌ Error during embedding: %s", e)
+            logger.error("Error during embedding: %s", e)
             raise
 
     def build_vector_index(self, chunks: list[DocumentChunk]) -> tuple[np.ndarray, list[DocumentChunk]]:

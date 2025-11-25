@@ -1,11 +1,7 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "vaxtalk"
 version = "0.1.0"
-description = "Add your description here"
+description = "VaxTalkAssistant: An AI-powered assistant for vaccine information and support."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -23,11 +19,11 @@ dependencies = [
 ]
 
 [project.scripts]
-vaxtalk = "src.VaxTalkAssistant:main"
-load-corpus = "src.load_corpus_and_data:main"
+vaxtalk = "vaxtalk.agent:main"
+load-corpus = "vaxtalk.load_corpus_and_data:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["vaxtalk"]
 
 [dependency-groups]
 dev = [
@@ -36,3 +32,7 @@ dev = [
     "nbstripout>=0.7.1",
     "pre-commit>=3.6.0",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

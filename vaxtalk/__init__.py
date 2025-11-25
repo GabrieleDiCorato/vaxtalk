@@ -2,6 +2,6 @@
 
 __version__ = "0.1.0"
 
-from .VaxTalkAssistant import root_agent, vax_talk_assistant, runner
+from .agent import root_agent, vax_talk_assistant, runner
 
 __all__ = ["root_agent", "vax_talk_assistant", "runner"]

@@ -210,7 +210,6 @@ __marimo__/
 # Databases
 *.db
 *.sqlite3
-src/Chatbot_test.py
 
 # Files
 docs/

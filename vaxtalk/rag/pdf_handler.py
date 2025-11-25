@@ -7,8 +7,8 @@ for use in a Retrieval-Augmented Generation (RAG) system.
 
 import os
 from pypdf import PdfReader
-from src.model.document_chunk import DocumentChunk, DocType
-from src.config.logging_config import get_logger
+from vaxtalk.model.document_chunk import DocumentChunk, DocType
+from vaxtalk.config.logging_config import get_logger
 
 logger = get_logger(__name__)
 
