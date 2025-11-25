@@ -49,10 +49,13 @@ logger.info("API key loaded")
 
 # Model Configuration
 MODEL_RAG = get_env_variable("MODEL_RAG", "gemini-2.5-flash-lite")
-MODEL_SENTIMENT = get_env_variable("MODEL_SENTIMENT", "gemini-2.5-flash-lite")
 MODEL_AGGREGATOR = get_env_variable("MODEL_AGGREGATOR", "gemini-2.5-flash-lite")
 MODEL_SAFETY_CHECK = get_env_variable("MODEL_SAFETY_CHECK", "gemini-2.5-flash-lite")
 MODEL_REFINER = get_env_variable("MODEL_REFINER", "gemini-2.5-flash-lite")
+
+# Sentiment Analysis Model Configuration (separate models for embeddings and LLM)
+EMBEDDING_MODEL = get_env_variable("EMBEDDING_MODEL", "text-embedding-004")
+SENTIMENT_LLM_MODEL = get_env_variable("SENTIMENT_LLM_MODEL", "openrouter/mistralai/ministral-8b")
 
 # Paths & Directories
 DOC_FOLDER_PATH = project_root / get_env_variable("DOC_FOLDER_PATH", "docs")
