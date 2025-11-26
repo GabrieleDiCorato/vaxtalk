@@ -29,15 +29,19 @@ When the user asks a question:
 ## SENTIMENT ANALYSIS PROMPTS
 ######################################
 
-SENTIMENT_AGENT_INSTRUCTION = """You are an expert at analyzing user sentiment based on their queries.
-Your task is to evaluate the user's input and determine their sentiment regarding vaccine information.
+SENTIMENT_AGENT_INSTRUCTION = """You orchestrate hybrid sentiment analysis for this conversation.
 
 <User query>
 {{session.state['user:input']}}
 </User query>
 
-If the user is particularly frustrated, confused, anxious, or dissatisfied about vaccination information,
-flag these sentiments using the save_sentiment tool.
+Always call the `run_sentiment_analysis` tool exactly once to classify the user's
+satisfaction, frustration, and confusion levels. The tool already stores a
+SentimentOutput object in session state.
+
+After the tool completes, write one concise sentence explaining how the detected
+sentiment should shape the next response. If the tool fails, state
+"Sentiment unavailable; defaulting to neutral." and describe the issue.
 """
 
 

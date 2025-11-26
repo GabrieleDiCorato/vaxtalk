@@ -3,6 +3,7 @@ To launch the application:
 adk web --port 42423 --session_service_uri sqlite+aiosqlite:///cache/vaxtalk_sessions.db --logo-text VaxTalkAssistant --logo-image-url https://drive.google.com/file/d/1ajO7VOLybRS6lVEKoTiBy6YrUUlY
 """
 
+from typing import Any
 from pathlib import Path
 
 # Google ADK Imports
@@ -18,7 +19,7 @@ from google.genai.types import HttpRetryOptions
 from vaxtalk.config import load_env_variables, get_env_variable, get_env_int, get_env_list
 from vaxtalk.config.logging_config import setup_logging
 from vaxtalk.connectors.llm_connection_factory import LlmConnectionFactory
-from vaxtalk.model import SentimentOutput
+from vaxtalk.model import SentimentOutput, Intensity
 from vaxtalk.prompts import (
     RAG_AGENT_INSTRUCTION,
     SENTIMENT_AGENT_INSTRUCTION,
@@ -26,6 +27,7 @@ from vaxtalk.prompts import (
     SAFETY_CHECK_INSTRUCTION,
 )
 from vaxtalk.rag.rag_service import RagService
+from vaxtalk.sentiment.sentiment_service import SentimentService
 
 
 ######################################
@@ -55,6 +57,7 @@ logger.info("API key loaded")
 
 # Model Configuration
 MODEL_RAG = get_env_variable("MODEL_RAG", "gemini-2.5-flash-lite")
+MODEL_SENTIMENT = get_env_variable("MODEL_SENTIMENT", "gemini-2.5-flash-lite")
 MODEL_AGGREGATOR = get_env_variable("MODEL_AGGREGATOR", "gemini-2.5-flash-lite")
 MODEL_SAFETY_CHECK = get_env_variable("MODEL_SAFETY_CHECK", "gemini-2.5-flash-lite")
 MODEL_REFINER = get_env_variable("MODEL_REFINER", "gemini-2.5-flash-lite")
@@ -119,6 +122,22 @@ logger.info("  Embedding shape: %s", stats['embedding_shape'])
 # rag_kb.clear_cache()
 
 ######################################
+## SENTIMENT SERVICE SETUP
+######################################
+
+try:
+    sentiment_service = SentimentService()
+    sentiment_service.build_sentiment_phrases_embeddings(use_cache=True)
+    proto_stats = sentiment_service.get_stats()
+    logger.info(
+        "SentimentService initialized with %s prototypes",
+        proto_stats.get("total", 0)
+    )
+except Exception as exc:
+    logger.error("Failed to initialize SentimentService: %s", exc)
+    sentiment_service = None
+
+######################################
 ## AGENTS SETUP
 ######################################
 
@@ -169,24 +188,62 @@ logger.info("RAG Agent configured")
 ######################################
 
 
-# Test: we could use a tool to save sentiment in session state.
+def _neutral_sentiment_output() -> SentimentOutput:
+    return SentimentOutput(
+        satisfaction=Intensity.LOW,
+        frustration=Intensity.LOW,
+        confusion=Intensity.LOW,
+    )
+
+
 @FunctionTool
-def save_sentiment(
-    tool_context: ToolContext, sentiment: str
-) -> dict[str, str]:
-    """
-    Tool to record and save the sentiment analysis result into session state.
+def run_sentiment_analysis(tool_context: ToolContext) -> dict[str, Any]:
+    """Run hybrid sentiment analysis and persist result in session state."""
 
-    Args:
-        sentiment (str): The sentiment analysis result to be saved.
-    """
+    user_input = str(tool_context.state.get("user:input", "")).strip()
+    if not user_input:
+        result = _neutral_sentiment_output()
+        reason = "empty_input"
+    elif sentiment_service is None:
+        logger.warning("SentimentService unavailable; returning neutral sentiment.")
+        result = _neutral_sentiment_output()
+        reason = "service_unavailable"
+    else:
+        try:
+            result = sentiment_service.analyze_emotion(user_input)
+            reason = "ok"
+        except RuntimeError as runtime_error:
+            logger.warning("SentimentService runtime error: %s", runtime_error)
+            try:
+                sentiment_service.build_sentiment_phrases_embeddings(use_cache=False)
+                result = sentiment_service.analyze_emotion(user_input)
+                reason = "rebuilt"
+            except Exception as rebuild_error:
+                logger.error(
+                    "Failed rebuilding sentiment prototypes: %s", rebuild_error
+                )
+                result = _neutral_sentiment_output()
+                reason = "fallback"
+        except Exception as unexpected_error:
+            logger.error("Unexpected sentiment analysis error: %s", unexpected_error)
+            result = _neutral_sentiment_output()
+            reason = "fallback"
 
-    tool_context.state["sentiment"] = sentiment
-    return {"status": "success"}
+    tool_context.state["sentiment_output"] = result
+    return {
+        "status": "success",
+        "reason": reason,
+        "sentiment": result.model_dump(),
+    }
 
 
-logger.info("Sentiment Tools created.")
+logger.info("Sentiment tool configured.")
 
+# There are two different storage areas:
+# tool_context.state[...] is the shared session state backing the entire workflow.
+# Only the tool mutates the sentiment_output entry there, and no other component writes to that key.
+# The agent’s output_key controls what value gets returned as this agent’s final response
+# to the orchestrator; The agent's sentiment_output does not overwrite the session state directly.
 sentiment_agent = Agent(
     name="sentiment_analysis",
     model=LlmConnectionFactory.get_llm_connection(
@@ -194,9 +251,9 @@ sentiment_agent = Agent(
         retry_config=retry_config
     ),
     instruction=SENTIMENT_AGENT_INSTRUCTION,
-    tools=[save_sentiment],
-    output_key="sentiment_output",  # The result will be stored with this key.
-    #output_schema=SentimentOutput,  # Define the expected output schema.
+    tools=[run_sentiment_analysis],
+    output_key="sentiment_output",
+    output_schema=SentimentOutput,
 )
 
 logger.info("Sentiment agent created.")
