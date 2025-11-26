@@ -20,6 +20,7 @@ from vaxtalk.config import load_env_variables, get_env_variable, get_env_int, ge
 from vaxtalk.config.logging_config import setup_logging
 from vaxtalk.connectors.llm_connection_factory import LlmConnectionFactory
 from vaxtalk.model import SentimentOutput, Intensity
+from vaxtalk.patches.parallel_agent_patch import patch_parallel_agent
 from vaxtalk.prompts import (
     RAG_AGENT_INSTRUCTION,
     SENTIMENT_AGENT_INSTRUCTION,
@@ -41,6 +42,9 @@ project_root = Path(__file__).resolve().parent.parent
 logger = setup_logging(log_dir=project_root / "logs", log_level="INFO")
 logger.info("Project imports loaded")
 logger.info("Project root set to: %s", project_root)
+
+# Monkey-patch ADK ParallelAgent merge loop to avoid OTel detach issues.
+patch_parallel_agent(logger)
 
 ######################################
 ## ENV VARIABLES
@@ -229,11 +233,12 @@ def run_sentiment_analysis(tool_context: ToolContext) -> dict[str, Any]:
             result = _neutral_sentiment_output()
             reason = "fallback"
 
-    tool_context.state["sentiment_output"] = result
+    result_json = result.model_dump(mode='json')
+    tool_context.state["sentiment_output"] = result_json
     return {
         "status": "success",
         "reason": reason,
-        "sentiment": result.model_dump(),
+        "sentiment": result_json,
     }
 
 
@@ -253,7 +258,7 @@ sentiment_agent = Agent(
     instruction=SENTIMENT_AGENT_INSTRUCTION,
     tools=[run_sentiment_analysis],
     output_key="sentiment_output",
-    output_schema=SentimentOutput,
+   #output_schema=SentimentOutput,
 )
 
 logger.info("Sentiment agent created.")

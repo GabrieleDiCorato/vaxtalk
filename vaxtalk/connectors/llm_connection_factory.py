@@ -40,7 +40,6 @@ class LlmConnectionFactory:
             logger.info("Creating LiteLlm connection for OpenRouter model: %s", model_full_name)
             return LiteLlm(
                 model=model_full_name,
-                retry_options=retry_config,
                 api_key=api_key,
                 api_base=api_base
             )

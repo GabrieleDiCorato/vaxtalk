@@ -80,7 +80,7 @@ Return EXACTLY one JSON dictionary as a STRING, no extra text:
 DRAFT_COMPOSER_INSTRUCTION = """You are a structured-output assistant specialized in public-health communication.
 
 ## Inputs
-User Query: {user_input}
+User Query: {{session.state['user:input']}}
 Factual Data (RAG): {rag_output}
 Sentiment Data: {sentiment_output?}
 
