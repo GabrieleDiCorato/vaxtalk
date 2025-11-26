@@ -16,21 +16,21 @@ _LAZY_ATTRS = set(__all__)
 
 
 def __getattr__(name: str):
-	"""Lazily import heavy agent objects on demand."""
+    """Lazily import heavy agent objects on demand."""
 
-	if name in _LAZY_ATTRS:
-		module = import_module("vaxtalk.agent")
-		value = getattr(module, name)
-		globals()[name] = value  # Cache for subsequent lookups
-		return value
-	raise AttributeError(f"module 'vaxtalk' has no attribute '{name}'")
+    if name in _LAZY_ATTRS:
+        module = import_module("vaxtalk.agent")
+        value = getattr(module, name)
+        globals()[name] = value  # Cache for subsequent lookups
+        return value
+    raise AttributeError(f"module 'vaxtalk' has no attribute '{name}'")
 
 
 def __dir__() -> list[str]:
-	"""Expose lazy attributes to dir() callers for better discoverability."""
+    """Expose lazy attributes to dir() callers for better discoverability."""
 
-	return sorted(list(globals().keys()) + list(_LAZY_ATTRS))
+    return sorted(list(globals().keys()) + list(_LAZY_ATTRS))
 
 
 if TYPE_CHECKING:  # pragma: no cover - assists type checkers without runtime cost
-	from .agent import root_agent, vax_talk_assistant, runner
+    from .agent import root_agent, vax_talk_assistant, runner
