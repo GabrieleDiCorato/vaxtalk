@@ -13,7 +13,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.tool_context import ToolContext
-from google.genai.types import HttpRetryOptions
+from google.genai.types import HttpRetryOptions, Content
 
 # Project Imports
 from vaxtalk.config import load_env_variables, get_env_variable, get_env_int, get_env_list
@@ -200,11 +200,35 @@ def _neutral_sentiment_output() -> SentimentOutput:
     )
 
 
+def _extract_user_input(tool_context: ToolContext) -> str:
+    """Best-effort extraction of the latest user utterance for tools."""
+
+    content: Content | None = getattr(tool_context, "user_content", None)
+    if not content or not content.parts:
+        return ""
+
+    segments: list[str] = []
+    for part in content.parts:
+        if part.text:
+            segments.append(part.text)
+        elif part.inline_data and part.inline_data.data:
+            try:
+                segments.append(part.inline_data.data.decode("utf-8"))
+            except UnicodeDecodeError:
+                continue
+
+    return "\n".join(segment.strip() for segment in segments if segment.strip())
+
+
 @FunctionTool
 def run_sentiment_analysis(tool_context: ToolContext) -> dict[str, Any]:
     """Run hybrid sentiment analysis and persist result in session state."""
 
-    user_input = str(tool_context.state.get("user:input", "")).strip()
+    user_input = str(tool_context.state.get("user:input", "") or "").strip()
+    if not user_input:
+        user_input = _extract_user_input(tool_context).strip()
+        if user_input:
+            tool_context.state["user:input"] = user_input
     if not user_input:
         result = _neutral_sentiment_output()
         reason = "empty_input"

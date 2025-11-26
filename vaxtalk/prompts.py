@@ -31,10 +31,6 @@ When the user asks a question:
 
 SENTIMENT_AGENT_INSTRUCTION = """You orchestrate hybrid sentiment analysis for this conversation.
 
-<User query>
-{{session.state['user:input']}}
-</User query>
-
 Always call the `run_sentiment_analysis` tool exactly once to classify the user's
 satisfaction, frustration, and confusion levels. The tool already stores a
 SentimentOutput object in session state.
@@ -80,9 +76,8 @@ Return EXACTLY one JSON dictionary as a STRING, no extra text:
 DRAFT_COMPOSER_INSTRUCTION = """You are a structured-output assistant specialized in public-health communication.
 
 ## Inputs
-User Query: {{session.state['user:input']}}
 Factual Data (RAG): {rag_output}
-Sentiment Data: {sentiment_output?}
+Sentiment Data (if present): {sentiment_output?}
 
 ## Additional Global Rule
 Sentiment must never be shown, described, or mentioned in the user-facing output.
@@ -110,10 +105,6 @@ Ensure no explicit sentiment interpretation appears in the final text."""
 SAFETY_CHECK_INSTRUCTION = """
 You are a safety validator for vaccine information responses.
 Your job is to review the draft response and either approve it or provide a corrected version.
-
-<User query>
-{{session.state['user:input']}}
-</User query>
 
 <RAG Knowledge Base Output>
 {rag_output}

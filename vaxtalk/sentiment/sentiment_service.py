@@ -88,7 +88,7 @@ class SentimentService:
         # Sentiment phrases file path
         sentiment_phrases_path = get_env_variable(
             "SENTIMENT_PHRASES_FILE",
-            "vaxtalk/sentiment/sentiment_phrases.json"
+            "sentiment/sentiment_phrases.json"
         )
         self.sentiment_phrases_file = self.project_root / sentiment_phrases_path
         self.sentiment_cache_file = self.cache_dir / "sentiment_prototypes.pkl"
