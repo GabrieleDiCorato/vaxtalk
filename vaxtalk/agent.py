@@ -19,6 +19,12 @@ from vaxtalk.config import load_env_variables, get_env_variable, get_env_int, ge
 from vaxtalk.config.logging_config import setup_logging
 from vaxtalk.connectors.llm_connection_factory import LlmConnectionFactory
 from vaxtalk.model import SentimentOutput
+from vaxtalk.prompts import (
+    RAG_AGENT_INSTRUCTION,
+    SENTIMENT_AGENT_INSTRUCTION,
+    DRAFT_COMPOSER_INSTRUCTION,
+    SAFETY_CHECK_INSTRUCTION,
+)
 from vaxtalk.rag.rag_service import RagService
 
 
@@ -143,18 +149,6 @@ def retrieve_info(query: str) -> str:
 # Create retrieval tool from the knowledge base
 rag_tool = FunctionTool(retrieve_info)
 
-# Define agent instruction
-prompt_rag = """You are a helpful assistant for vaccine information.
-You have access to a knowledge base containing official documents and web pages about vaccinations.
-
-When the user asks a question:
-1. Use the `retrieve` tool to find relevant information.
-2. Answer the question based ONLY on the information returned by the tool.
-3. If the tool returns no information, or the information is not pertinent, say you don't have that information.
-4. Always cite the sources provided in the tool output.
-5. Be concise but thorough in your responses.
-"""
-
 # Create the agent
 rag_agent = Agent(
     name="RAG_Vaccine_Informer",
@@ -162,7 +156,7 @@ rag_agent = Agent(
         model_full_name=MODEL_RAG,
         retry_config=retry_config
     ),
-    instruction=prompt_rag,
+    instruction=RAG_AGENT_INSTRUCTION,
     tools=[rag_tool],
     output_key="rag_output",
 )
@@ -193,24 +187,13 @@ def save_sentiment(
 
 logger.info("Sentiment Tools created.")
 
-prompt_sentiment = """You are an expert at analyzing user sentiment based on their queries.
-Your task is to evaluate the user's input and determine their sentiment regarding vaccine information.
-
-<User query>
-{{session.state['user:input']}}
-</User query>
-
-If the user is particularly frustrated, confused, anxious, or dissatisfied about vaccination information,
-flag these sentiments using the save_sentiment tool.
-"""
-
 sentiment_agent = Agent(
     name="sentiment_analysis",
     model=LlmConnectionFactory.get_llm_connection(
         model_full_name=MODEL_SENTIMENT,
         retry_config=retry_config
     ),
-    instruction=prompt_sentiment,
+    instruction=SENTIMENT_AGENT_INSTRUCTION,
     tools=[save_sentiment],
     output_key="sentiment_output",  # The result will be stored with this key.
     #output_schema=SentimentOutput,  # Define the expected output schema.
@@ -223,44 +206,13 @@ logger.info("Sentiment agent created.")
 ## DRAFT COMPOSER AGENT
 ######################################
 
-draft_composer_prompt = """You are an expert assistant for vaccine information.
-Your task is to compose a comprehensive draft response.
-
-<User query>
-{{session.state['user:input']}}
-</User query>
-
-<RAG Knowledge Base Output>
-{rag_output}
-</RAG Knowledge Base Output>
-
-{{#if sentiment_output}}
-<User Sentiment Analysis>
-{sentiment_output?}
-</User Sentiment Analysis>
-
-Adapt your response to user sentiment:
-- High frustration → Acknowledge concerns explicitly and be extra clear
-- High confusion → Break down into simpler terms with examples
-- Low satisfaction → Provide additional reassurance and resources
-- High anxiety → Emphasize consulting healthcare providers
-{{/if}}
-
-Compose a response that:
-1. Answers based ONLY on the RAG output
-2. Includes all source citations that the RAG output provided. Do not invent new ones.
-3. Be empathetic and professional in tone
-
-This draft will be reviewed for safety before delivery.
-"""
-
 draft_composer_agent = Agent(
     name="DraftComposerAgent",
     model=LlmConnectionFactory.get_llm_connection(
         model_full_name=MODEL_AGGREGATOR,
         retry_config=retry_config
     ),
-    instruction=draft_composer_prompt,
+    instruction=DRAFT_COMPOSER_INSTRUCTION,
     output_key="draft_response",
 )
 
@@ -270,40 +222,6 @@ logger.info("DraftComposerAgent configured")
 ######################################
 ## SAFETY CHECK AGENT
 ######################################
-
-safety_check_prompt = """
-You are a safety validator for vaccine information responses.
-Your job is to review the draft response and either approve it or provide a corrected version.
-
-<User query>
-{{session.state['user:input']}}
-</User query>
-
-<RAG Knowledge Base Output>
-{rag_output}
-</RAG Knowledge Base Output>
-
-<Draft Response>
-{draft_response}
-</Draft Response>
-
-Validate the response against these criteria:
-1. Accuracy based on credible sources from RAG output
-2. No harmful, misleading, or dangerous medical advice
-3. No privacy violations or sensitive data disclosures
-4. Respectful and appropriate tone for all audiences
-5. All source citations are preserved
-
-If the response passes all criteria:
-- Return it exactly as-is
-
-If there are issues:
-- Fix them while maintaining source citations and accuracy
-- If issues are critical, use the flag_for_human_review tool
-
-Output only the final safe response text.
-"""
-
 
 @FunctionTool
 def flag_for_human_review(
@@ -332,7 +250,7 @@ safety_check_agent = Agent(
         model_full_name=MODEL_SAFETY_CHECK,
         retry_config=retry_config
     ),
-    instruction=safety_check_prompt,
+    instruction=SAFETY_CHECK_INSTRUCTION,
     tools=[flag_for_human_review],
     output_key="final_response",
 )

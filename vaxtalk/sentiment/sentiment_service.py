@@ -22,6 +22,7 @@ import requests
 from vaxtalk.config import get_env_float, get_env_variable
 from vaxtalk.config.logging_config import get_logger
 from vaxtalk.model.sentiment_output import Intensity, SentimentOutput
+from vaxtalk.prompts import SENTIMENT_LLM_SYSTEM_PROMPT
 
 logger = get_logger(__name__)
 
@@ -50,33 +51,6 @@ class SentimentService:
     # Similarity score scaling range for normalization
     SIMILARITY_SCALE_MIN: float = 0.0
     SIMILARITY_SCALE_MAX: float = 2.0
-
-    # LLM system prompt for sentiment classification
-    LLM_SYSTEM_PROMPT = """
-You are part of a multilingual medical information system focused on vaccines.
-
-You analyze the emotional tone of a patient message, which may be written in any language.
-Your task is to estimate the intensity (low, medium, high) of these three dimensions:
-
-- satisfaction (reassured, positive, grateful)
-- frustration (annoyed, angry, fed up)
-- confusion (uncertain, lost, not understanding)
-
-Constraints:
-- Use only "low", "medium", or "high" as values.
-- Classify all three emotions independently.
-- Focus ONLY on the emotion in the text, not on medical correctness.
-- If the message is very short or ambiguous, prefer "medium" for one emotion and "low" for the others.
-
-Strict output format:
-Return EXACTLY one JSON dictionary as a STRING, no extra text:
-
-{
-  "satisfaction": "<low|medium|high>",
-  "frustration": "<low|medium|high>",
-  "confusion": "<low|medium|high>"
-}
-"""
 
     def __init__(self):
         """
@@ -510,7 +484,7 @@ Return EXACTLY one JSON dictionary as a STRING, no extra text:
         Raises:
             RuntimeError: If API request fails
         """
-        full_prompt = f"{self.LLM_SYSTEM_PROMPT}\n\nUser message:\n{query}"
+        full_prompt = f"{SENTIMENT_LLM_SYSTEM_PROMPT}\n\nUser message:\n{query}"
 
         headers = {
             "Authorization": f"Bearer {self.openrouter_api_key}",
