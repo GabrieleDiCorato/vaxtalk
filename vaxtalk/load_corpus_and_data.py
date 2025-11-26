@@ -65,17 +65,21 @@ def main():
     rag_kb.clear_cache()
     logger.info("Cache cleared")
 
-    # Rebuild knowledge base
-    logger.info("Building knowledge base from scratch...")
-    rag_kb.build_knowledge_base(
-        pdf_folder=DOC_FOLDER_PATH,
-        root_url=DOC_WEB_URL_ROOT,
-        max_pages=RAG_MAX_PAGES,
-        max_depth=RAG_MAX_DEPTH,
-        chunk_size=RAG_CHUNK_SIZE,
-        chunk_overlap=RAG_CHUNK_OVERLAP,
-        use_cache=True,  # Will save to cache after building
-    )
+    try:
+        # Rebuild knowledge base
+        logger.info("Building knowledge base from scratch...")
+        rag_kb.build_knowledge_base(
+            pdf_folder=DOC_FOLDER_PATH,
+            root_url=DOC_WEB_URL_ROOT,
+            max_pages=RAG_MAX_PAGES,
+            max_depth=RAG_MAX_DEPTH,
+            chunk_size=RAG_CHUNK_SIZE,
+            chunk_overlap=RAG_CHUNK_OVERLAP,
+            use_cache=True,  # Will save to cache after building
+        )
+    except Exception as e:
+        logger.error("Error building knowledge base: %s", e)
+        return 1
 
     # Display statistics
     stats = rag_kb.get_stats()
@@ -93,9 +97,13 @@ def main():
     sentiment_service.clear_cache()
     logger.info("Sentiment cache cleared")
 
-    # Rebuild sentiment embeddings
-    logger.info("Building sentiment prototypes from scratch...")
-    sentiment_service.build_sentiment_phrases_embeddings(use_cache=True)
+    try:
+        # Rebuild sentiment embeddings
+        logger.info("Building sentiment prototypes from scratch...")
+        sentiment_service.build_sentiment_phrases_embeddings(use_cache=True)
+    except Exception as e:
+        logger.error("Error building sentiment phrases cache: %s", e)
+        return 1
 
     # Display sentiment statistics
     sentiment_stats = sentiment_service.get_stats()

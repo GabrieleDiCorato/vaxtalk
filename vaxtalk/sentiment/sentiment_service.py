@@ -69,16 +69,16 @@ class SentimentService:
     def _load_configuration(self) -> None:
         """Load all configuration from environment variables and set up paths."""
         # Project structure
-        self.project_root = Path(Path.cwd().parent.parent)
+        self.project_root = Path(__file__).resolve().parent.parent
 
         # Cache directory setup
         cache_dir = get_env_variable("CACHE_DIR", "cache")
         self.cache_dir = self.project_root / Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # Model configurations
-        self.embedding_model = get_env_variable("EMBEDDING_MODEL")
-        self.llm_model = get_env_variable("SENTIMENT_LLM_MODEL")
+        # Model configurations (support legacy variable names for backward compatibility)
+        self.embedding_model = get_env_variable("MODEL_SENTIMENT_EMBEDDING", "text-embedding-004")
+        self.llm_model = get_env_variable("MODEL_SENTIMENT_LLM", "openrouter/mistralai/ministral-8b")
 
         # OpenRouter API configuration
         self.openrouter_api_key = get_env_variable("OPENROUTER_API_KEY")
