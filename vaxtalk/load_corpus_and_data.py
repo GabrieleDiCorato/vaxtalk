@@ -13,17 +13,19 @@ from pathlib import Path
 from vaxtalk.config import load_env_variables, get_env_variable, get_env_int
 from vaxtalk.config.logging_config import setup_logging, get_logger
 from vaxtalk.rag.rag_service import RagService
+from vaxtalk.sentiment.sentiment_service import SentimentService
 
 
 def main():
     """Main entry point for loading corpus and data.
 
     This function:
-    1. Clears the cache directory
+    1. Clears the cache directory for RAG and sentiment
     2. Reloads all documents from PDFs
     3. Crawls the website
-    4. Builds new embeddings
-    5. Saves the new cache
+    4. Builds new RAG embeddings
+    5. Builds new sentiment prototype embeddings
+    6. Saves the new cache files
     """
     # Get project root relative to this file's location
     project_root = Path(__file__).resolve().parent.parent
@@ -81,6 +83,25 @@ def main():
     logger.info("  Total chunks: %s", stats['num_chunks'])
     logger.info("  Embedding shape: %s", stats['embedding_shape'])
     logger.info("  Cache directory: %s", stats['cache_dir'])
+
+    # Initialize sentiment service
+    logger.info("Initializing sentiment service...")
+    sentiment_service = SentimentService()
+
+    # Clear sentiment cache
+    logger.info("Clearing sentiment cache...")
+    sentiment_service.clear_cache()
+    logger.info("Sentiment cache cleared")
+
+    # Rebuild sentiment embeddings
+    logger.info("Building sentiment prototypes from scratch...")
+    sentiment_service.build_sentiment_phrases_embeddings(use_cache=True)
+
+    # Display sentiment statistics
+    sentiment_stats = sentiment_service.get_stats()
+    logger.info("Sentiment Prototypes Rebuilt Successfully!")
+    logger.info("  Total prototypes: %s", sentiment_stats['total'])
+    logger.info("  By emotion: %s", sentiment_stats['by_emotion'])
 
     logger.info("Corpus reload complete!")
     return 0
