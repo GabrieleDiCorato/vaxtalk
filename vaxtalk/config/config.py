@@ -47,3 +47,14 @@ def get_env_list(key: str, default: list[int]) -> list[int]:
         return [int(x.strip()) for x in value.split(',')]
     except ValueError:
         raise ValueError(f"{key} must be comma-separated integers, got: {value}")
+
+
+def get_env_float(key: str, default: float) -> float:
+    """Get environment variable as float with default value."""
+    value = os.getenv(key)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        raise ValueError(f"{key} must be a float, got: {value}")

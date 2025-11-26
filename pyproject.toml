@@ -8,6 +8,7 @@ dependencies = [
     "beautifulsoup4>=4.14.2",
     "google-adk>=1.19.0",
     "google-genai>=1.52.0",
+    "litellm>=1.80.5",
     "numpy>=2.3.5",
     "pip>=25.3",
     "protobuf>=6.33.1",

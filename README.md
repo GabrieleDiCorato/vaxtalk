@@ -108,6 +108,15 @@ adk web --port 42423 --session_service_uri sqlite+aiosqlite:///cache/vaxtalk_ses
 
 Navigate to the URL provided by the adk message.
 
+## 🧩 Importing VaxTalk Programmatically
+
+Importing the top-level `vaxtalk` package intentionally has almost no side
+effects.  When you need the ADK objects programmatically (e.g.
+`from vaxtalk import root_agent`), the package now lazy-loads
+`vaxtalk.agent` the moment one of those attributes is accessed.  This keeps
+utility scripts such as `uv run load-corpus` lightweight while still exposing
+the same public interface for ADK launchers.
+
 ## 📊 First Run
 
 On first launch, the system will:

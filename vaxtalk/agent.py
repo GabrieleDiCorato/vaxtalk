@@ -3,23 +3,31 @@ To launch the application:
 adk web --port 42423 --session_service_uri sqlite+aiosqlite:///cache/vaxtalk_sessions.db --logo-text VaxTalkAssistant --logo-image-url https://drive.google.com/file/d/1ajO7VOLybRS6lVEKoTiBy6YrUUlY
 """
 
+from typing import Any
 from pathlib import Path
 
 # Google ADK Imports
 from google.adk.agents import Agent, SequentialAgent, ParallelAgent, LoopAgent
 from google.adk.apps.app import App, EventsCompactionConfig
-from google.adk.models.google_llm import Gemini
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.tool_context import ToolContext
-from google.genai import types
+from google.genai.types import HttpRetryOptions
 
 # Project Imports
 from vaxtalk.config import load_env_variables, get_env_variable, get_env_int, get_env_list
-from vaxtalk.config.logging_config import setup_logging, get_logger
-from vaxtalk.model import SentimentOutput
-from vaxtalk.rag.rag import RagKnowledgeBase
+from vaxtalk.config.logging_config import setup_logging
+from vaxtalk.connectors.llm_connection_factory import LlmConnectionFactory
+from vaxtalk.model import SentimentOutput, Intensity
+from vaxtalk.prompts import (
+    RAG_AGENT_INSTRUCTION,
+    SENTIMENT_AGENT_INSTRUCTION,
+    DRAFT_COMPOSER_INSTRUCTION,
+    SAFETY_CHECK_INSTRUCTION,
+)
+from vaxtalk.rag.rag_service import RagService
+from vaxtalk.sentiment.sentiment_service import SentimentService
 
 
 ######################################
@@ -54,6 +62,10 @@ MODEL_AGGREGATOR = get_env_variable("MODEL_AGGREGATOR", "gemini-2.5-flash-lite")
 MODEL_SAFETY_CHECK = get_env_variable("MODEL_SAFETY_CHECK", "gemini-2.5-flash-lite")
 MODEL_REFINER = get_env_variable("MODEL_REFINER", "gemini-2.5-flash-lite")
 
+# Sentiment Analysis Model Configuration (separate models for embeddings and LLM)
+EMBEDDING_MODEL = get_env_variable("EMBEDDING_MODEL", "text-embedding-004")
+SENTIMENT_LLM_MODEL = get_env_variable("SENTIMENT_LLM_MODEL", "openrouter/mistralai/ministral-8b")
+
 # Paths & Directories
 DOC_FOLDER_PATH = project_root / get_env_variable("DOC_FOLDER_PATH", "docs")
 logger.info("Document folder path set to: %s", DOC_FOLDER_PATH)
@@ -83,7 +95,7 @@ RETRY_HTTP_STATUS_CODES = get_env_list("RETRY_HTTP_STATUS_CODES", [429, 500, 503
 ## RAG KNOWLEDGE BASE SETUP
 ######################################
 
-rag_kb = RagKnowledgeBase(
+rag_kb = RagService(
     api_key=GOOGLE_API_KEY,
     cache_dir=CACHE_DIR
 )
@@ -110,11 +122,27 @@ logger.info("  Embedding shape: %s", stats['embedding_shape'])
 # rag_kb.clear_cache()
 
 ######################################
+## SENTIMENT SERVICE SETUP
+######################################
+
+try:
+    sentiment_service = SentimentService()
+    sentiment_service.build_sentiment_phrases_embeddings(use_cache=True)
+    proto_stats = sentiment_service.get_stats()
+    logger.info(
+        "SentimentService initialized with %s prototypes",
+        proto_stats.get("total", 0)
+    )
+except Exception as exc:
+    logger.error("Failed to initialize SentimentService: %s", exc)
+    sentiment_service = None
+
+######################################
 ## AGENTS SETUP
 ######################################
 
 # Configure retry settings for API calls
-retry_config = types.HttpRetryOptions(
+retry_config = HttpRetryOptions(
     attempts=RETRY_ATTEMPTS,
     initial_delay=RETRY_INITIAL_DELAY,
     http_status_codes=RETRY_HTTP_STATUS_CODES
@@ -140,26 +168,14 @@ def retrieve_info(query: str) -> str:
 # Create retrieval tool from the knowledge base
 rag_tool = FunctionTool(retrieve_info)
 
-# Define agent instruction
-prompt_rag = """You are a helpful assistant for vaccine information.
-You have access to a knowledge base containing official documents and web pages about vaccinations.
-
-When the user asks a question:
-1. Use the `retrieve` tool to find relevant information.
-2. Answer the question based ONLY on the information returned by the tool.
-3. If the tool returns no information, or the information is not pertinent, say you don't have that information.
-4. Always cite the sources provided in the tool output.
-5. Be concise but thorough in your responses.
-"""
-
 # Create the agent
 rag_agent = Agent(
     name="RAG_Vaccine_Informer",
-    model=Gemini(
-        model=MODEL_RAG,
-        retry_options=retry_config
+    model=LlmConnectionFactory.get_llm_connection(
+        model_full_name=MODEL_RAG,
+        retry_config=retry_config
     ),
-    instruction=prompt_rag,
+    instruction=RAG_AGENT_INSTRUCTION,
     tools=[rag_tool],
     output_key="rag_output",
 )
@@ -172,45 +188,72 @@ logger.info("RAG Agent configured")
 ######################################
 
 
-# Test: we could use a tool to save sentiment in session state.
+def _neutral_sentiment_output() -> SentimentOutput:
+    return SentimentOutput(
+        satisfaction=Intensity.LOW,
+        frustration=Intensity.LOW,
+        confusion=Intensity.LOW,
+    )
+
+
 @FunctionTool
-def save_sentiment(
-    tool_context: ToolContext, sentiment: str
-) -> dict[str, str]:
-    """
-    Tool to record and save the sentiment analysis result into session state.
+def run_sentiment_analysis(tool_context: ToolContext) -> dict[str, Any]:
+    """Run hybrid sentiment analysis and persist result in session state."""
 
-    Args:
-        sentiment (str): The sentiment analysis result to be saved.
-    """
+    user_input = str(tool_context.state.get("user:input", "")).strip()
+    if not user_input:
+        result = _neutral_sentiment_output()
+        reason = "empty_input"
+    elif sentiment_service is None:
+        logger.warning("SentimentService unavailable; returning neutral sentiment.")
+        result = _neutral_sentiment_output()
+        reason = "service_unavailable"
+    else:
+        try:
+            result = sentiment_service.analyze_emotion(user_input)
+            reason = "ok"
+        except RuntimeError as runtime_error:
+            logger.warning("SentimentService runtime error: %s", runtime_error)
+            try:
+                sentiment_service.build_sentiment_phrases_embeddings(use_cache=False)
+                result = sentiment_service.analyze_emotion(user_input)
+                reason = "rebuilt"
+            except Exception as rebuild_error:
+                logger.error(
+                    "Failed rebuilding sentiment prototypes: %s", rebuild_error
+                )
+                result = _neutral_sentiment_output()
+                reason = "fallback"
+        except Exception as unexpected_error:
+            logger.error("Unexpected sentiment analysis error: %s", unexpected_error)
+            result = _neutral_sentiment_output()
+            reason = "fallback"
 
-    tool_context.state["sentiment"] = sentiment
-    return {"status": "success"}
+    tool_context.state["sentiment_output"] = result
+    return {
+        "status": "success",
+        "reason": reason,
+        "sentiment": result.model_dump(),
+    }
 
 
-logger.info("Sentiment Tools created.")
+logger.info("Sentiment tool configured.")
 
-prompt_sentiment = """You are an expert at analyzing user sentiment based on their queries.
-Your task is to evaluate the user's input and determine their sentiment regarding vaccine information.
-
-<User query>
-{{session.state['user:input']}}
-</User query>
-
-If the user is particularly frustrated, confused, anxious, or dissatisfied about vaccination information,
-flag these sentiments using the save_sentiment tool.
-"""
-
+# There are two different storage areas:
+# tool_context.state[...] is the shared session state backing the entire workflow.
+# Only the tool mutates the sentiment_output entry there, and no other component writes to that key.
+# The agent’s output_key controls what value gets returned as this agent’s final response
+# to the orchestrator; The agent's sentiment_output does not overwrite the session state directly.
 sentiment_agent = Agent(
     name="sentiment_analysis",
-    model=Gemini(
-        model=MODEL_SENTIMENT,
-        retry_options=retry_config
+    model=LlmConnectionFactory.get_llm_connection(
+        model_full_name=MODEL_SENTIMENT,
+        retry_config=retry_config
     ),
-    instruction=prompt_sentiment,
-    tools=[save_sentiment],
-    output_key="sentiment_output",  # The result will be stored with this key.
-    #output_schema=SentimentOutput,  # Define the expected output schema.
+    instruction=SENTIMENT_AGENT_INSTRUCTION,
+    tools=[run_sentiment_analysis],
+    output_key="sentiment_output",
+    output_schema=SentimentOutput,
 )
 
 logger.info("Sentiment agent created.")
@@ -220,44 +263,13 @@ logger.info("Sentiment agent created.")
 ## DRAFT COMPOSER AGENT
 ######################################
 
-draft_composer_prompt = """You are an expert assistant for vaccine information.
-Your task is to compose a comprehensive draft response.
-
-<User query>
-{{session.state['user:input']}}
-</User query>
-
-<RAG Knowledge Base Output>
-{rag_output}
-</RAG Knowledge Base Output>
-
-{{#if sentiment_output}}
-<User Sentiment Analysis>
-{sentiment_output?}
-</User Sentiment Analysis>
-
-Adapt your response to user sentiment:
-- High frustration → Acknowledge concerns explicitly and be extra clear
-- High confusion → Break down into simpler terms with examples
-- Low satisfaction → Provide additional reassurance and resources
-- High anxiety → Emphasize consulting healthcare providers
-{{/if}}
-
-Compose a response that:
-1. Answers based ONLY on the RAG output
-2. Includes all source citations that the RAG output provided. Do not invent new ones.
-3. Be empathetic and professional in tone
-
-This draft will be reviewed for safety before delivery.
-"""
-
 draft_composer_agent = Agent(
     name="DraftComposerAgent",
-    model=Gemini(
-        model=MODEL_AGGREGATOR,
-        retry_options=retry_config
+    model=LlmConnectionFactory.get_llm_connection(
+        model_full_name=MODEL_AGGREGATOR,
+        retry_config=retry_config
     ),
-    instruction=draft_composer_prompt,
+    instruction=DRAFT_COMPOSER_INSTRUCTION,
     output_key="draft_response",
 )
 
@@ -267,40 +279,6 @@ logger.info("DraftComposerAgent configured")
 ######################################
 ## SAFETY CHECK AGENT
 ######################################
-
-safety_check_prompt = """
-You are a safety validator for vaccine information responses.
-Your job is to review the draft response and either approve it or provide a corrected version.
-
-<User query>
-{{session.state['user:input']}}
-</User query>
-
-<RAG Knowledge Base Output>
-{rag_output}
-</RAG Knowledge Base Output>
-
-<Draft Response>
-{draft_response}
-</Draft Response>
-
-Validate the response against these criteria:
-1. Accuracy based on credible sources from RAG output
-2. No harmful, misleading, or dangerous medical advice
-3. No privacy violations or sensitive data disclosures
-4. Respectful and appropriate tone for all audiences
-5. All source citations are preserved
-
-If the response passes all criteria:
-- Return it exactly as-is
-
-If there are issues:
-- Fix them while maintaining source citations and accuracy
-- If issues are critical, use the flag_for_human_review tool
-
-Output only the final safe response text.
-"""
-
 
 @FunctionTool
 def flag_for_human_review(
@@ -325,11 +303,11 @@ def flag_for_human_review(
 
 safety_check_agent = Agent(
     name="SafetyCheckAgent",
-    model=Gemini(
-        model=MODEL_SAFETY_CHECK,
-        retry_options=retry_config
+    model=LlmConnectionFactory.get_llm_connection(
+        model_full_name=MODEL_SAFETY_CHECK,
+        retry_config=retry_config
     ),
-    instruction=safety_check_prompt,
+    instruction=SAFETY_CHECK_INSTRUCTION,
     tools=[flag_for_human_review],
     output_key="final_response",
 )

@@ -1,0 +1,92 @@
+[
+	{
+		"id": "sat_en_high_1",
+		"language": "en",
+		"emotion": "satisfaction",
+		"text": "Perfect, that's exactly what I needed."
+	},
+	{
+		"id": "sat_en_med_1",
+		"language": "en",
+		"emotion": "satisfaction",
+		"text": "Okay, that works for me."
+	},
+	{
+		"id": "sat_es_high_1",
+		"language": "es",
+		"emotion": "satisfaction",
+		"text": "Excelente, estoy muy contento con esto."
+	},
+	{
+		"id": "sat_fr_med_1",
+		"language": "fr",
+		"emotion": "satisfaction",
+		"text": "Bien, ça me convient."
+	},
+	{
+		"id": "sat_it_high_1",
+		"language": "it",
+		"emotion": "satisfaction",
+		"text": "Fantastico, sono molto soddisfatto."
+	},
+	{
+		"id": "frus_en_high_1",
+		"language": "en",
+		"emotion": "frustration",
+		"text": "This is absolutely ridiculous."
+	},
+	{
+		"id": "frus_en_med_1",
+		"language": "en",
+		"emotion": "frustration",
+		"text": "This is getting annoying."
+	},
+	{
+		"id": "frus_de_high_1",
+		"language": "de",
+		"emotion": "frustration",
+		"text": "Das ist wirklich frustrierend."
+	},
+	{
+		"id": "frus_pt_med_1",
+		"language": "pt",
+		"emotion": "frustration",
+		"text": "Isso está me irritando."
+	},
+	{
+		"id": "frus_es_high_1",
+		"language": "es",
+		"emotion": "frustration",
+		"text": "Esto es imposible, no aguanto más."
+	},
+	{
+		"id": "conf_en_high_1",
+		"language": "en",
+		"emotion": "confusion",
+		"text": "I'm completely lost."
+	},
+	{
+		"id": "conf_en_med_1",
+		"language": "en",
+		"emotion": "confusion",
+		"text": "Wait, what?"
+	},
+	{
+		"id": "conf_fr_high_1",
+		"language": "fr",
+		"emotion": "confusion",
+		"text": "Je ne comprends vraiment pas."
+	},
+	{
+		"id": "conf_it_med_1",
+		"language": "it",
+		"emotion": "confusion",
+		"text": "Non capisco."
+	},
+	{
+		"id": "conf_es_high_1",
+		"language": "es",
+		"emotion": "confusion",
+		"text": "No entiendo nada de esto."
+	}
+]

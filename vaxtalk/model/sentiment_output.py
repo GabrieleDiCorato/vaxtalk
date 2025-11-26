@@ -15,6 +15,6 @@ class SentimentOutput(BaseModel):
         use_enum_values=True,
     )
 
-    frustration_level: Intensity = Field(..., description="The level of frustration expressed by the user.")
-    confusion_level: Intensity = Field(..., description="The level of confusion expressed by the user.")
-    satisfaction_level: Intensity = Field(..., description="The level of satisfaction expressed by the user.")
+    frustration: Intensity = Field(..., description="The level of frustration expressed by the user.")
+    confusion: Intensity = Field(..., description="The level of confusion expressed by the user.")
+    satisfaction: Intensity = Field(..., description="The level of satisfaction expressed by the user.")
