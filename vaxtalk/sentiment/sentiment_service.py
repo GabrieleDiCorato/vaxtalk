@@ -90,6 +90,8 @@ Return EXACTLY one JSON dictionary as a STRING, no extra text:
 
         # We will use OpenRouter for everything
         self.openrouter_api_key = get_env_variable("OPENROUTER_API_KEY")
+        self.openrouter_embed_url = get_env_variable("OPENROUTER_EMBED_URL")
+        self.openrouter_chat_url = get_env_variable("OPENROUTER_CHAT_URL")
 
         # Read phrases file
         sentiment_phrases = get_env_variable(
@@ -106,12 +108,27 @@ Return EXACTLY one JSON dictionary as a STRING, no extra text:
 
         # Prototype storage
         self.sentiment_phrases: list[dict[str, Any]] | None = None
+        # Pre-indexed embeddings by emotion for efficient similarity computation
+        self._emotion_embeddings: dict[str, list[np.ndarray]] | None = None
 
         logger.info("SentimentService initialized:")
         logger.info("  - Embedding model: %s", self.embedding_model)
         logger.info("  - LLM model: %s", self.llm_model)
         logger.info("  - Sentiment phrases file: %s", self.sentiment_phrases_file)
         logger.info("  - Fusion weights: LLM=%.2f, EMB=%.2f", self.w_llm, self.w_emb)
+
+    def _load_sentiment_phrases_file(self) -> list[dict[str, Any]]:
+        # Load sentiment expressions from JSON file
+        logger.info("Loading sentiment phrases from %s", self.sentiment_phrases_file)
+
+        if not self.sentiment_phrases_file.exists():
+            raise FileNotFoundError(f"Sentiment phrases file not found: {self.sentiment_phrases_file}")
+
+        with open(self.sentiment_phrases_file, "r", encoding="utf-8") as f:
+            sentiment_phrases: list[dict[str, Any]] = json.load(f)
+
+        logger.info("Loaded %s sentiment phrases from JSON file", len(sentiment_phrases))
+        return sentiment_phrases
 
     def build_sentiment_phrases_embeddings(self, use_cache: bool = True) -> None:
         """
@@ -129,36 +146,28 @@ Return EXACTLY one JSON dictionary as a STRING, no extra text:
                 with open(self.sentiment_cache_file, 'rb') as f:
                     self.sentiment_phrases = pickle.load(f)
                 if self.sentiment_phrases:
-                    logger.info("Loaded %s emotion prototypes from cache", len(self.sentiment_phrases))
+                    logger.info("Loaded %s emotion embeddings from cache", len(self.sentiment_phrases))
+                    # Pre-index embeddings by emotion for efficient similarity computation
+                    self._build_emotion_embeddings_index()
                 return
             except Exception as e:
                 logger.warning("Error loading cached prototypes: %s. Rebuilding from JSON.", e)
 
-        # Load from JSON file
-        logger.info("Loading sentiment phrases from %s", self.sentiment_phrases_file)
+        # Load sentiment expressions from JSON file
+        sentiment_phrases = self._load_sentiment_phrases_file()
 
-        if not self.sentiment_phrases_file.exists():
-            raise FileNotFoundError(f"Emotion prototypes file not found: {self.sentiment_phrases_file}")
+        # Batch generate normalized embeddings for all phrases at once
+        texts = [p["text"] for p in sentiment_phrases]
+        embeddings = self._eval_normalized_embeddings(texts)
 
-        with open(self.sentiment_phrases_file, "r", encoding="utf-8") as f:
-            sentiment_phrases = json.load(f)
-
-        logger.info("Loaded %s prototypes from JSON file", len(sentiment_phrases))
-
-        # Generate embeddings for each phrase
-        for p in sentiment_phrases:
-            text = p.get("text", "")
-            emb = self._embed_single_text(text)
-            p["embedding"] = emb.tolist()
-
-            # Normalize embeddings for cosine similarity
-            vec = np.asarray(p["embedding"], dtype=np.float32)
-            norm = np.linalg.norm(vec)
-            if norm > 0:
-                vec = vec / norm
-            p["_embedding_norm"] = vec
+        # Assign embeddings back to each phrase
+        for p, emb in zip(sentiment_phrases, embeddings):
+            p["embedding"] = emb
 
         self.sentiment_phrases = sentiment_phrases
+
+        # Pre-index embeddings by emotion for efficient similarity computation
+        self._build_emotion_embeddings_index()
 
         # Cache for future use
         with open(self.sentiment_cache_file, 'wb') as f:
@@ -167,49 +176,85 @@ Return EXACTLY one JSON dictionary as a STRING, no extra text:
         if self.sentiment_phrases:
             logger.info("Cached %s prototypes to %s", len(self.sentiment_phrases), self.sentiment_cache_file)
 
-    def _embed_single_text(self, text: str) -> np.ndarray:
+    def _clear_cache(self) -> None:
+        """Clear cached sentiment prototype embeddings."""
+        if self.sentiment_cache_file.exists():
+            try:
+                os.remove(self.sentiment_cache_file)
+                logger.info("Cleared sentiment prototype cache: %s", self.sentiment_cache_file)
+            except Exception as e:
+                logger.error("Error clearing sentiment cache: %s", e)
+
+    def _build_emotion_embeddings_index(self) -> None:
+        """Pre-index embeddings by emotion for efficient similarity computation."""
+        if self.sentiment_phrases is None:
+            self._emotion_embeddings = None
+            return
+
+        # Index prototypes by emotion
+        emo_to_vecs: dict[str, list[np.ndarray]] = {emo: [] for emo in self.EMOTIONS}
+        for p in self.sentiment_phrases:
+            emo = p.get("emotion")
+            emb = p.get("embedding")
+            if emo in emo_to_vecs and emb is not None:
+                emo_to_vecs[emo].append(emb)
+
+        self._emotion_embeddings = emo_to_vecs
+        logger.debug("Indexed %s emotion embeddings: %s",
+                    sum(len(v) for v in emo_to_vecs.values()),
+                    {k: len(v) for k, v in emo_to_vecs.items()})
+
+    def _eval_normalized_embeddings(
+        self,
+        texts: list[str]
+    ) -> list[np.ndarray]:
         """
-        Generate embedding for a single text using configured embedding model.
-        Supports both Google Gemini and OpenRouter embedding models.
+        Generate L2‑normalized embeddings for a list of texts.
 
         Args:
-            text: Text to embed
+            texts: List of texts to embed.
 
         Returns:
-            L2-normalized embedding vector
+            List of L2‑normalized embedding vectors, same order as `texts`.
         """
-        try:
+        if not texts:
+            return []
 
-            # Use OpenRouter embeddings API
+        all_embeddings: list[np.ndarray] = []
+        try:
             headers = {
-                    "Authorization": f"Bearer {self.openrouter_api_key}",
-                    "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.openrouter_api_key}",
+                "Content-Type": "application/json",
             }
+
             payload = {
                 "model": self.embedding_model,
-                "input": [text],
+                "input": texts,
             }
             resp = requests.post(
-                "https://openrouter.ai/api/v1/embeddings",
+                self.openrouter_embed_url,
                 json=payload,
                 headers=headers,
-                timeout=60
+                timeout=60,
             )
             if resp.status_code != 200:
-                raise RuntimeError(f"OpenRouter embedding error {resp.status_code}: {resp.text[:200]}")
+                raise RuntimeError(
+                    f"OpenRouter embedding error {resp.status_code}: {resp.text[:200]}"
+                )
 
+            # Retrieve and normalize embeddings
             data = resp.json()
-            emb = np.asarray(data["data"][0]["embedding"], dtype=np.float32)
+            for item in data.get("data", []):
+                emb = np.asarray(item["embedding"], dtype=np.float32)
+                norm = np.linalg.norm(emb)
+                if norm > 0:
+                    emb = emb / norm
+                all_embeddings.append(emb)
 
-            # Normalize embedding
-            norm = np.linalg.norm(emb)
-            if norm > 0:
-                emb = emb / norm
-
-            return emb
+            return all_embeddings
 
         except Exception as e:
-            logger.error("Error generating embedding: %s", e)
+            logger.error("Error generating batch embeddings: %s", e)
             raise
 
     @staticmethod
@@ -223,26 +268,21 @@ Return EXACTLY one JSON dictionary as a STRING, no extra text:
         """
         Compute maximum cosine similarity to prototypes for each emotion.
 
+        Uses pre-indexed emotion embeddings for efficient computation.
+
         Args:
             query_vec_norm: Normalized query embedding vector
 
         Returns:
             Dict mapping emotion name to maximum similarity score
         """
-        if self.sentiment_phrases is None:
-            raise RuntimeError("Prototypes not loaded. Call build_prototype_embeddings() first.")
+        if self._emotion_embeddings is None:
+            raise RuntimeError("Sentiment embeddings not loaded. Call build_sentiment_phrases_embeddings() first.")
 
-        # Index prototypes by emotion
-        emo_to_vecs: dict[str, list[np.ndarray]] = {emo: [] for emo in self.EMOTIONS}
-        for p in self.sentiment_phrases:
-            emo = p.get("emotion")
-            if emo in emo_to_vecs:
-                emo_to_vecs[emo].append(p["_embedding_norm"])
-
-        # Compute max similarity per emotion
+        # Compute max similarity per emotion using pre-indexed embeddings
         scores: dict[str, float] = {}
         for emo in self.EMOTIONS:
-            vecs = emo_to_vecs[emo]
+            vecs = self._emotion_embeddings[emo]
             if not vecs:
                 scores[emo] = 0.0
                 continue
@@ -268,7 +308,7 @@ Return EXACTLY one JSON dictionary as a STRING, no extra text:
 
             # Use OpenRouter via requests
             headers = {
-                "Authorization": f"Bearer {self.llm_api_key}",
+                "Authorization": f"Bearer {self.openrouter_api_key}",
                 "Content-Type": "application/json",
             }
             payload = {
@@ -279,7 +319,7 @@ Return EXACTLY one JSON dictionary as a STRING, no extra text:
                 "temperature": 0.0,
             }
             resp = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+                self.openrouter_chat_url,
                 headers=headers,
                 json=payload,
                 timeout=60
@@ -366,7 +406,8 @@ Return EXACTLY one JSON dictionary as a STRING, no extra text:
         llm_pred = self._call_llm_for_sentiment(query)
 
         # 2. Get embedding scores
-        query_vec_norm = self._embed_single_text(query)
+        query_embeddings = self._eval_normalized_embeddings([query])
+        query_vec_norm = query_embeddings[0]
         emb_scores = self._max_similarity_per_emotion(query_vec_norm)
 
         # 3. Normalize embedding scores across emotions [0, 1] then scale to [0, 2]
