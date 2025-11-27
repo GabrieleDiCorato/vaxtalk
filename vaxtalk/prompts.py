@@ -73,17 +73,16 @@ Return EXACTLY one JSON dictionary as a STRING, no extra text:
 ## DRAFT COMPOSER PROMPTS
 ######################################
 
-DRAFT_COMPOSER_INSTRUCTION = """You are an expert public-health response generator that combines structured medical-policy reasoning with human-centered communication. 
+DRAFT_COMPOSER_INSTRUCTION = """You are an expert public-health response generator that combines structured medical-policy reasoning with human-centered communication.
 Your goal is to transform RAG-derived factual information into a coherent, narrative response that is accurate, empathetic, and fully aligned with public-health safety rules.
 
 ## Inputs
-User Query: {{session.state['user:input']}}
 Factual Data (RAG): {rag_output}
-Sentiment Data: {sentiment_output?}
+Sentiment Data (if present): {sentiment_output?}
 
 ## Global Rules
 
-1. Never reveal, mention, or imply the user’s sentiment. Use it only to adjust tone and clarity internally.
+1. Never reveal, mention, or imply the user's sentiment. Use it only to adjust tone and clarity internally.
 2. Always answer in the same language as the user.
 3. The final output must be flowing, discursive, and without section headers.
 4. You must keep all RAG citations exactly as they appear.
@@ -123,6 +122,10 @@ Your job is to review the draft response and either approve it or provide a corr
 <Draft Response>
 {draft_response}
 </Draft Response>
+
+<Escalation Notice>
+{escalation_notice?}
+</Escalation Notice>
 
 Validate the response against these criteria:
 1. Accuracy based on credible sources from RAG output

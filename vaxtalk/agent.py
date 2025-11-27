@@ -5,6 +5,9 @@ adk web --port 42423 --session_service_uri sqlite+aiosqlite:///cache/vaxtalk_ses
 
 from typing import Any
 from pathlib import Path
+import os
+
+import requests
 
 # Google ADK Imports
 from google.adk.agents import Agent, SequentialAgent, ParallelAgent, LoopAgent
@@ -94,6 +97,48 @@ RAG_RETRIEVAL_K = get_env_int("RAG_RETRIEVAL_K", 5)
 RETRY_ATTEMPTS = get_env_int("RETRY_ATTEMPTS", 3)
 RETRY_INITIAL_DELAY = get_env_int("RETRY_INITIAL_DELAY", 1)
 RETRY_HTTP_STATUS_CODES = get_env_list("RETRY_HTTP_STATUS_CODES", [429, 500, 503, 504])
+
+######################################
+## ESCALATION CONFIGURATION
+######################################
+
+ESCALATION_ENABLED = os.getenv("ESCALATION_ENABLED", "true").strip().lower() not in {"false", "0", "no"}
+ESCALATION_DIMENSIONS = tuple(
+    dim.strip().lower()
+    for dim in os.getenv("ESCALATION_DIMENSIONS", "frustration,confusion").split(",")
+    if dim.strip()
+)
+ESCALATION_TRIGGER_LEVEL = os.getenv("ESCALATION_TRIGGER_LEVEL", "high").strip().lower()
+ESCALATION_NOTICE_TEXT = os.getenv(
+    "ESCALATION_NOTICE_TEXT",
+    "A human specialist has been notified and may join the conversation.",
+).strip()
+DEFAULT_ESCALATION_TEMPLATE = (
+    "VaxTalk escalation triggered.\n"
+    "User message: {user_input}\n"
+    "Sentiment: {sentiment_summary}"
+)
+ESCALATION_MESSAGE_TEMPLATE = os.getenv(
+    "ESCALATION_MESSAGE_TEMPLATE",
+    DEFAULT_ESCALATION_TEMPLATE,
+)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+INTENSITY_RANK = {
+    Intensity.LOW: 0,
+    Intensity.MEDIUM: 1,
+    Intensity.HIGH: 2,
+}
+
+try:
+    ESCALATION_TRIGGER_INTENSITY = Intensity(ESCALATION_TRIGGER_LEVEL)
+except ValueError:
+    logger.warning(
+        "Invalid ESCALATION_TRIGGER_LEVEL '%s'; defaulting to HIGH.",
+        ESCALATION_TRIGGER_LEVEL,
+    )
+    ESCALATION_TRIGGER_INTENSITY = Intensity.HIGH
 
 ######################################
 ## RAG KNOWLEDGE BASE SETUP
@@ -220,15 +265,108 @@ def _extract_user_input(tool_context: ToolContext) -> str:
     return "\n".join(segment.strip() for segment in segments if segment.strip())
 
 
+def _sentiment_value(sentiment: SentimentOutput, dimension: str) -> Intensity | None:
+    value_raw = getattr(sentiment, dimension, None)
+    if value_raw is None:
+        return None
+    try:
+        return Intensity(value_raw)
+    except ValueError:
+        return None
+
+
+def _should_trigger_escalation(sentiment: SentimentOutput) -> bool:
+    if not ESCALATION_ENABLED:
+        return False
+    for dimension in ESCALATION_DIMENSIONS:
+        value = _sentiment_value(sentiment, dimension)
+        if value is None:
+            continue
+        if INTENSITY_RANK[value] >= INTENSITY_RANK[ESCALATION_TRIGGER_INTENSITY]:
+            return True
+    return False
+
+
+def _render_escalation_message(sentiment: SentimentOutput, user_input: str) -> str:
+    trimmed_input = (user_input or "").strip()
+    if len(trimmed_input) > 600:
+        trimmed_input = f"{trimmed_input[:600]}..."
+    if not trimmed_input:
+        trimmed_input = "<no user text captured>"
+    sentiment_summary = (
+        f"satisfaction={sentiment.satisfaction}, "
+        f"frustration={sentiment.frustration}, "
+        f"confusion={sentiment.confusion}"
+    )
+    data = {
+        "user_input": trimmed_input,
+        "sentiment_summary": sentiment_summary,
+    }
+    template = ESCALATION_MESSAGE_TEMPLATE or DEFAULT_ESCALATION_TEMPLATE
+    try:
+        return template.format(**data)
+    except KeyError as exc:
+        logger.warning(
+            "Invalid ESCALATION_MESSAGE_TEMPLATE placeholder %s; using default template.",
+            exc,
+        )
+        return DEFAULT_ESCALATION_TEMPLATE.format(**data)
+
+
+def _send_telegram_notification(message: str) -> bool:
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        logger.warning(
+            "Sentiment escalation triggered but Telegram credentials are missing."
+        )
+        return False
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "disable_web_page_preview": True,
+    }
+    try:
+        response = requests.post(url, data=payload, timeout=15)
+    except requests.RequestException as exc:
+        logger.warning("Failed to contact Telegram API: %s", exc)
+        return False
+
+    if response.status_code != 200:
+        preview = response.text[:200]
+        logger.warning("Telegram API error %s: %s", response.status_code, preview)
+        return False
+
+    logger.info("Human escalation sent via Telegram chat %s", TELEGRAM_CHAT_ID)
+    return True
+
+
+def _maybe_trigger_escalation(
+    tool_context: ToolContext,
+    sentiment: SentimentOutput,
+    user_input: str,
+) -> None:
+    if tool_context.state.get("escalation:notified"):
+        return
+    if not _should_trigger_escalation(sentiment):
+        return
+
+    if ESCALATION_NOTICE_TEXT:
+        tool_context.state["escalation_notice"] = ESCALATION_NOTICE_TEXT
+
+    message = _render_escalation_message(sentiment, user_input)
+    success = _send_telegram_notification(message)
+    tool_context.state["escalation:notified"] = True
+    tool_context.state["escalation:status"] = "sent" if success else "failed"
+    tool_context.state["escalation:channel"] = "telegram"
+
+
+
 @FunctionTool
 def run_sentiment_analysis(tool_context: ToolContext) -> dict[str, Any]:
     """Run hybrid sentiment analysis and persist result in session state."""
 
-    user_input = str(tool_context.state.get("user:input", "") or "").strip()
-    if not user_input:
-        user_input = _extract_user_input(tool_context).strip()
-        if user_input:
-            tool_context.state["user:input"] = user_input
+    user_input = _extract_user_input(tool_context).strip()
     if not user_input:
         result = _neutral_sentiment_output()
         reason = "empty_input"
@@ -259,6 +397,7 @@ def run_sentiment_analysis(tool_context: ToolContext) -> dict[str, Any]:
 
     result_json = result.model_dump(mode='json')
     tool_context.state["sentiment_output"] = result_json
+    _maybe_trigger_escalation(tool_context, result, user_input)
     return {
         "status": "success",
         "reason": reason,

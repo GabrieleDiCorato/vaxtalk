@@ -22,6 +22,17 @@ VaxTalk assists users with vaccine-related questions by:
 3. **Synthesizing** information through a multi-agent workflow
 4. **Maintaining** conversation history during the session
 
+## 📡 Human Escalation Notifications
+
+When a conversation shows **high frustration or confusion**, VaxTalk can notify a human via Telegram and append a user-facing notice so people know someone is joining.
+
+1. Enable the flow by setting `ESCALATION_ENABLED=true` in `.env`.
+2. Provide `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (direct chat or group ID).
+3. Tune thresholds with `ESCALATION_DIMENSIONS` and `ESCALATION_TRIGGER_LEVEL` (default: high frustration/confusion).
+4. Customize the Telegram payload and UI notice via `ESCALATION_MESSAGE_TEMPLATE` and `ESCALATION_NOTICE_TEXT`.
+
+If the Telegram call fails, the app logs a warning but continues responding; no retries are attempted for the same session.
+
 ## 🚀 Setup Guide
 
 ### Prerequisites

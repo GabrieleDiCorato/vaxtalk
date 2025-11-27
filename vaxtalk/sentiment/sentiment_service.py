@@ -69,12 +69,14 @@ class SentimentService:
     def _load_configuration(self) -> None:
         """Load all configuration from environment variables and set up paths."""
         # Project structure
-        self.project_root = Path(__file__).resolve().parent.parent
+        self.project_root = Path(__file__).resolve().parent.parent.parent
+        logger.info("Sentiment project root directory set to %s", self.project_root)
 
         # Cache directory setup
         cache_dir = get_env_variable("CACHE_DIR", "cache")
         self.cache_dir = self.project_root / Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("Set sentiment cache directory to %s", self.cache_dir)
 
         # Model configurations (support legacy variable names for backward compatibility)
         self.embedding_model = get_env_variable("MODEL_SENTIMENT_EMBEDDING", "text-embedding-004")
