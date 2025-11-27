@@ -65,8 +65,8 @@ logger.info("  Embedding shape: %s", stats['embedding_shape'])
 ## RAG TOOL
 ######################################
 
-
-def retrieve_info(query: str) -> str:
+@FunctionTool
+def rag_tool(query: str) -> str:
     """
     Retrieve relevant vaccine information from the knowledge base.
 
@@ -81,9 +81,5 @@ def retrieve_info(query: str) -> str:
         >>> print(result)  # Returns relevant chunks with source citations
     """
     return rag_kb.retrieve(query, k=RAG_RETRIEVAL_K)
-
-
-# Create retrieval tool from the knowledge base
-rag_tool = FunctionTool(retrieve_info)
 
 logger.info("RAG tool configured")

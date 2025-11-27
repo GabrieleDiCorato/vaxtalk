@@ -53,6 +53,10 @@ logger.info("Environment variables loaded")
 ## CONFIGURATION
 ######################################
 
+# Application Configuration
+APP_NAME = get_env_variable("APP_NAME", "VaxTalkAssistant")
+DEFAULT_LANGUAGE = get_env_variable("DEFAULT_LANGUAGE", "italian")
+
 # Model Configuration
 MODEL_RAG = get_env_variable("MODEL_RAG", "gemini-2.5-flash-lite")
 MODEL_SENTIMENT = get_env_variable("MODEL_SENTIMENT", "gemini-2.5-flash-lite")
@@ -60,7 +64,6 @@ MODEL_AGGREGATOR = get_env_variable("MODEL_AGGREGATOR", "gemini-2.5-flash-lite")
 MODEL_SAFETY_CHECK = get_env_variable("MODEL_SAFETY_CHECK", "gemini-2.5-flash-lite")
 
 # Database Configuration
-APP_NAME = "VaxTalkAssistant"
 CACHE_DIR = project_root / get_env_variable("CACHE_DIR", "cache")
 SQL_ASYNC_DRIVER = get_env_variable("SQL_ASYNC_DRIVER", "aiosqlite")
 DB_NAME = CACHE_DIR / get_env_variable("DB_NAME", "vaxtalk_sessions.db")
@@ -88,6 +91,7 @@ retry_config = HttpRetryOptions(
 
 rag_agent = Agent(
     name="RAG_Vaccine_Informer",
+    description="Provides vaccine-related information using a retrieval-augmented generation approach.",
     model=LlmConnectionFactory.get_llm_connection(
         model_full_name=MODEL_RAG,
         retry_config=retry_config
@@ -105,6 +109,7 @@ logger.info("RAG Agent configured")
 
 sentiment_agent = Agent(
     name="sentiment_analysis",
+    description="Analyzes user sentiment to inform response tone and content.",
     model=LlmConnectionFactory.get_llm_connection(
         model_full_name=MODEL_SENTIMENT,
         retry_config=retry_config
@@ -122,6 +127,7 @@ logger.info("Sentiment Agent configured")
 
 draft_composer_agent = Agent(
     name="DraftComposerAgent",
+    description="Composes draft responses based on RAG and sentiment inputs.",
     model=LlmConnectionFactory.get_llm_connection(
         model_full_name=MODEL_AGGREGATOR,
         retry_config=retry_config
@@ -138,6 +144,7 @@ logger.info("DraftComposerAgent configured")
 
 safety_check_agent = Agent(
     name="SafetyCheckAgent",
+    description="Validates draft responses for safety and compliance with medical communication standards.",
     model=LlmConnectionFactory.get_llm_connection(
         model_full_name=MODEL_SAFETY_CHECK,
         retry_config=retry_config
@@ -156,6 +163,7 @@ logger.info("SafetyCheckAgent configured")
 # Sequential agent: draft composition followed by safety checking
 aggregator_with_safety = SequentialAgent(
     name="AggregatorWithSafety",
+    description="Composes draft responses and validates them for safety.",
     sub_agents=[
         draft_composer_agent,
         safety_check_agent,
@@ -167,12 +175,14 @@ logger.info("AggregatorWithSafety configured")
 # Parallel agent: RAG and Sentiment run simultaneously
 parallel_rag_sentiment_agent = ParallelAgent(
     name="ParallelRAGAndSentimentTeam",
+    description="Runs RAG and Sentiment analysis agents in parallel.",
     sub_agents=[sentiment_agent, rag_agent],
 )
 
 # Root agent: orchestrates the full workflow
 root_agent = SequentialAgent(
     name="VaccineChatbotRootAgent",
+    description="Root agent orchestrating RAG, Sentiment Analysis, Draft Composition, and Safety Checking for vaccine information.",
     sub_agents=[
         parallel_rag_sentiment_agent,  # Parallel: RAG + Sentiment
         aggregator_with_safety,        # Sequential: Draft -> Safety
@@ -182,7 +192,7 @@ root_agent = SequentialAgent(
 logger.info("Root agent workflow configured")
 
 ######################################
-## RUNNER SETUP
+## RUNNER SETUP (not used when launching via ADK web)
 ######################################
 
 # Persistent memory using a SQLite database
@@ -199,6 +209,11 @@ vax_talk_assistant = App(
     events_compaction_config=events_compaction_config,
 )
 
+initial_state = {
+    "default__response_language": DEFAULT_LANGUAGE
+}
+
+session = session_service.create_session(app_name=APP_NAME, user_id = "user", state=initial_state)
 runner = Runner(app=vax_talk_assistant, session_service=session_service)
 
 ######################################
