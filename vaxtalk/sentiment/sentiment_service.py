@@ -52,6 +52,11 @@ class SentimentService:
     SIMILARITY_SCALE_MIN: float = 0.0
     SIMILARITY_SCALE_MAX: float = 2.0
 
+    # API configuration constants
+    API_TIMEOUT_SECONDS: int = 60
+    MAX_LOG_QUERY_LENGTH: int = 100
+    MAX_ERROR_MESSAGE_LENGTH: int = 200
+
     def __init__(self):
         """
         Initialize the SentimentService.
@@ -62,6 +67,7 @@ class SentimentService:
         # Initialize internal state variables
         self.sentiment_phrases: list[dict[str, Any]] | None = None
         self._emotion_embeddings: dict[str, list[np.ndarray]] | None = None
+        self._session: requests.Session | None = None
 
         self._load_configuration()
         self._log_initialization()
@@ -106,6 +112,33 @@ class SentimentService:
         logger.info("  - LLM model: %s", self.llm_model)
         logger.info("  - Sentiment phrases file: %s", self.sentiment_phrases_file)
         logger.info("  - Fusion weights: LLM=%.2f, EMB=%.2f", self.w_llm, self.w_emb)
+
+    @property
+    def session(self) -> requests.Session:
+        """
+        Get or create a reusable HTTP session.
+
+        Lazily initializes the session on first access. Using a session
+        enables connection pooling and reuse across multiple API calls.
+
+        Returns:
+            Configured requests Session instance
+        """
+        if self._session is None:
+            self._session = requests.Session()
+        return self._session
+
+    def close(self) -> None:
+        """
+        Close the HTTP session and release resources.
+
+        Should be called when the service is no longer needed to properly
+        release connection pool resources.
+        """
+        if self._session is not None:
+            self._session.close()
+            self._session = None
+            logger.debug("HTTP session closed")
 
     def _load_sentiment_phrases_from_file(self) -> list[dict[str, Any]]:
         """
@@ -342,17 +375,17 @@ class SentimentService:
             "input": texts,
         }
 
-        response = requests.post(
+        response = self.session.post(
             self.openrouter_embed_url,
             json=payload,
             headers=headers,
-            timeout=60,
+            timeout=self.API_TIMEOUT_SECONDS,
         )
 
         if response.status_code != 200:
             error_message = (
                 f"OpenRouter embedding error {response.status_code}: "
-                f"{response.text[:200]}"
+                f"{response.text[:self.MAX_ERROR_MESSAGE_LENGTH]}"
             )
             raise RuntimeError(error_message)
 
@@ -499,17 +532,17 @@ class SentimentService:
             "temperature": 0.0,
         }
 
-        response = requests.post(
+        response = self.session.post(
             self.openrouter_chat_url,
             headers=headers,
             json=payload,
-            timeout=60
+            timeout=self.API_TIMEOUT_SECONDS,
         )
 
         if response.status_code != 200:
             error_message = (
                 f"OpenRouter error {response.status_code}: "
-                f"{response.text[:200]}"
+                f"{response.text[:self.MAX_ERROR_MESSAGE_LENGTH]}"
             )
             raise RuntimeError(error_message)
 
@@ -630,7 +663,7 @@ class SentimentService:
             RuntimeError: If sentiment phrases haven't been loaded yet
         """
         self._validate_embeddings_loaded()
-        logger.debug("Analyzing emotion for query: %s", query[:100])
+        logger.debug("Analyzing emotion for query: %s", query[:self.MAX_LOG_QUERY_LENGTH])
 
         # Get predictions from both sources
         llm_prediction = self._get_llm_sentiment_prediction(query)
