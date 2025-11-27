@@ -92,24 +92,26 @@ def main():
     logger.info("Initializing sentiment service...")
     sentiment_service = SentimentService()
 
-    # Clear sentiment cache
-    logger.info("Clearing sentiment cache...")
-    sentiment_service.clear_cache()
-    logger.info("Sentiment cache cleared")
-
     try:
+        # Clear sentiment cache
+        logger.info("Clearing sentiment cache...")
+        sentiment_service.clear_cache()
+        logger.info("Sentiment cache cleared")
+
         # Rebuild sentiment embeddings
         logger.info("Building sentiment prototypes from scratch...")
         sentiment_service.build_sentiment_phrases_embeddings(use_cache=True)
+
+        # Display sentiment statistics
+        sentiment_stats = sentiment_service.get_stats()
+        logger.info("Sentiment Prototypes Rebuilt Successfully!")
+        logger.info("  Total prototypes: %s", sentiment_stats['total'])
+        logger.info("  By emotion: %s", sentiment_stats['by_emotion'])
     except Exception as e:
         logger.error("Error building sentiment phrases cache: %s", e)
         return 1
-
-    # Display sentiment statistics
-    sentiment_stats = sentiment_service.get_stats()
-    logger.info("Sentiment Prototypes Rebuilt Successfully!")
-    logger.info("  Total prototypes: %s", sentiment_stats['total'])
-    logger.info("  By emotion: %s", sentiment_stats['by_emotion'])
+    finally:
+        sentiment_service.close()
 
     logger.info("Corpus reload complete!")
     return 0

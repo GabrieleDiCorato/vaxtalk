@@ -1,25 +1,23 @@
 """VaxTalkAssistant: An AI assistant for vaccine information using RAG and sentiment analysis.
+
 To launch the application:
-adk web --port 42423 --session_service_uri sqlite+aiosqlite:///cache/vaxtalk_sessions.db --logo-text VaxTalkAssistant --logo-image-url https://drive.google.com/file/d/1ajO7VOLybRS6lVEKoTiBy6YrUUlY
+    adk web --port 42423 --session_service_uri sqlite+aiosqlite:///cache/vaxtalk_sessions.db \
+        --logo-text VaxTalkAssistant
 """
 
-from typing import Any
 from pathlib import Path
 
 # Google ADK Imports
-from google.adk.agents import Agent, SequentialAgent, ParallelAgent, LoopAgent
+from google.adk.agents import Agent, SequentialAgent, ParallelAgent
 from google.adk.apps.app import App, EventsCompactionConfig
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
-from google.adk.tools.function_tool import FunctionTool
-from google.adk.tools.tool_context import ToolContext
-from google.genai.types import HttpRetryOptions, Content
+from google.genai.types import HttpRetryOptions
 
 # Project Imports
 from vaxtalk.config import load_env_variables, get_env_variable, get_env_int, get_env_list
 from vaxtalk.config.logging_config import setup_logging
 from vaxtalk.connectors.llm_connection_factory import LlmConnectionFactory
-from vaxtalk.model import SentimentOutput, Intensity
 from vaxtalk.patches.parallel_agent_patch import patch_parallel_agent
 from vaxtalk.prompts import (
     RAG_AGENT_INSTRUCTION,
@@ -27,15 +25,13 @@ from vaxtalk.prompts import (
     DRAFT_COMPOSER_INSTRUCTION,
     SAFETY_CHECK_INSTRUCTION,
 )
-from vaxtalk.rag.rag_service import RagService
-from vaxtalk.sentiment.sentiment_service import SentimentService
+from vaxtalk.tools import rag_tool, run_sentiment_analysis, flag_for_human_review
 
 
 ######################################
 ## PROJECT ROOT
 ######################################
 
-# Get project root relative to this file's location
 project_root = Path(__file__).resolve().parent.parent
 
 # Setup logging before any other operations
@@ -51,95 +47,29 @@ patch_parallel_agent(logger)
 ######################################
 
 load_env_variables(project_root / ".env")
-GOOGLE_API_KEY = get_env_variable("GOOGLE_API_KEY")
-logger.info("API key loaded")
+logger.info("Environment variables loaded")
 
 ######################################
 ## CONFIGURATION
 ######################################
-
 
 # Model Configuration
 MODEL_RAG = get_env_variable("MODEL_RAG", "gemini-2.5-flash-lite")
 MODEL_SENTIMENT = get_env_variable("MODEL_SENTIMENT", "gemini-2.5-flash-lite")
 MODEL_AGGREGATOR = get_env_variable("MODEL_AGGREGATOR", "gemini-2.5-flash-lite")
 MODEL_SAFETY_CHECK = get_env_variable("MODEL_SAFETY_CHECK", "gemini-2.5-flash-lite")
-MODEL_REFINER = get_env_variable("MODEL_REFINER", "gemini-2.5-flash-lite")
-
-# Sentiment Analysis Model Configuration (separate models for embeddings and LLM)
-EMBEDDING_MODEL = get_env_variable("EMBEDDING_MODEL", "text-embedding-004")
-SENTIMENT_LLM_MODEL = get_env_variable("SENTIMENT_LLM_MODEL", "openrouter/mistralai/ministral-8b")
-
-# Paths & Directories
-DOC_FOLDER_PATH = project_root / get_env_variable("DOC_FOLDER_PATH", "docs")
-logger.info("Document folder path set to: %s", DOC_FOLDER_PATH)
-CACHE_DIR = project_root / get_env_variable("CACHE_DIR", "cache")
-logger.info("Cache directory set to: %s", CACHE_DIR)
-DOC_WEB_URL_ROOT = get_env_variable("DOC_WEB_URL_ROOT", None)
 
 # Database Configuration
 APP_NAME = "VaxTalkAssistant"
+CACHE_DIR = project_root / get_env_variable("CACHE_DIR", "cache")
 SQL_ASYNC_DRIVER = get_env_variable("SQL_ASYNC_DRIVER", "aiosqlite")
 DB_NAME = CACHE_DIR / get_env_variable("DB_NAME", "vaxtalk_sessions.db")
-DB_URL = f"sqlite+{SQL_ASYNC_DRIVER}:///{DB_NAME}"  # Local SQLite file
-
-# RAG Configuration
-RAG_MAX_PAGES = get_env_int("RAG_MAX_PAGES", 100)
-RAG_MAX_DEPTH = get_env_int("RAG_MAX_DEPTH", 5)
-RAG_CHUNK_SIZE = get_env_int("RAG_CHUNK_SIZE", 800)
-RAG_CHUNK_OVERLAP = get_env_int("RAG_CHUNK_OVERLAP", 200)
-RAG_RETRIEVAL_K = get_env_int("RAG_RETRIEVAL_K", 5)
+DB_URL = f"sqlite+{SQL_ASYNC_DRIVER}:///{DB_NAME}"
 
 # API Retry Configuration
 RETRY_ATTEMPTS = get_env_int("RETRY_ATTEMPTS", 3)
 RETRY_INITIAL_DELAY = get_env_int("RETRY_INITIAL_DELAY", 1)
 RETRY_HTTP_STATUS_CODES = get_env_list("RETRY_HTTP_STATUS_CODES", [429, 500, 503, 504])
-
-######################################
-## RAG KNOWLEDGE BASE SETUP
-######################################
-
-rag_kb = RagService(
-    api_key=GOOGLE_API_KEY,
-    cache_dir=CACHE_DIR
-)
-logger.info("Knowledge base initialized")
-
-# Build knowledge base from PDFs and website
-rag_kb.build_knowledge_base(
-    pdf_folder=DOC_FOLDER_PATH,
-    root_url=DOC_WEB_URL_ROOT,
-    max_pages=RAG_MAX_PAGES,
-    max_depth=RAG_MAX_DEPTH,
-    chunk_size=RAG_CHUNK_SIZE,
-    chunk_overlap=RAG_CHUNK_OVERLAP,
-    use_cache=True,
-)
-
-# Display statistics
-stats = rag_kb.get_stats()
-logger.info("Knowledge Base Stats:")
-logger.info("  Chunks: %s", stats['num_chunks'])
-logger.info("  Embedding shape: %s", stats['embedding_shape'])
-
-# Clear cache to force rebuild
-# rag_kb.clear_cache()
-
-######################################
-## SENTIMENT SERVICE SETUP
-######################################
-
-try:
-    sentiment_service = SentimentService()
-    sentiment_service.build_sentiment_phrases_embeddings(use_cache=True)
-    proto_stats = sentiment_service.get_stats()
-    logger.info(
-        "SentimentService initialized with %s prototypes",
-        proto_stats.get("total", 0)
-    )
-except Exception as exc:
-    logger.error("Failed to initialize SentimentService: %s", exc)
-    sentiment_service = None
 
 ######################################
 ## AGENTS SETUP
@@ -156,23 +86,6 @@ retry_config = HttpRetryOptions(
 ## RAG AGENT
 ######################################
 
-# Create retrieval function with configured k parameter
-def retrieve_info(query: str) -> str:
-    """
-    Retrieve relevant vaccine information from the knowledge base.
-
-    Args:
-        query: The user's question about vaccines
-
-    Returns:
-        Formatted string with relevant information and sources
-    """
-    return rag_kb.retrieve(query, k=RAG_RETRIEVAL_K)
-
-# Create retrieval tool from the knowledge base
-rag_tool = FunctionTool(retrieve_info)
-
-# Create the agent
 rag_agent = Agent(
     name="RAG_Vaccine_Informer",
     model=LlmConnectionFactory.get_llm_connection(
@@ -186,92 +99,14 @@ rag_agent = Agent(
 
 logger.info("RAG Agent configured")
 
-
 ######################################
 ## SENTIMENT AGENT
 ######################################
 
-
-def _neutral_sentiment_output() -> SentimentOutput:
-    return SentimentOutput(
-        satisfaction=Intensity.LOW,
-        frustration=Intensity.LOW,
-        confusion=Intensity.LOW,
-    )
-
-
-def _extract_user_input(tool_context: ToolContext) -> str:
-    """Best-effort extraction of the latest user utterance for tools."""
-
-    content: Content | None = getattr(tool_context, "user_content", None)
-    if not content or not content.parts:
-        return ""
-
-    segments: list[str] = []
-    for part in content.parts:
-        if part.text:
-            segments.append(part.text)
-        elif part.inline_data and part.inline_data.data:
-            try:
-                segments.append(part.inline_data.data.decode("utf-8"))
-            except UnicodeDecodeError:
-                continue
-
-    return "\n".join(segment.strip() for segment in segments if segment.strip())
-
-
-@FunctionTool
-def run_sentiment_analysis(tool_context: ToolContext) -> dict[str, Any]:
-    """Run hybrid sentiment analysis and persist result in session state."""
-
-    user_input = str(tool_context.state.get("user:input", "") or "").strip()
-    if not user_input:
-        user_input = _extract_user_input(tool_context).strip()
-        if user_input:
-            tool_context.state["user:input"] = user_input
-    if not user_input:
-        result = _neutral_sentiment_output()
-        reason = "empty_input"
-    elif sentiment_service is None:
-        logger.warning("SentimentService unavailable; returning neutral sentiment.")
-        result = _neutral_sentiment_output()
-        reason = "service_unavailable"
-    else:
-        try:
-            result = sentiment_service.analyze_emotion(user_input)
-            reason = "ok"
-        except RuntimeError as runtime_error:
-            logger.warning("SentimentService runtime error: %s", runtime_error)
-            try:
-                sentiment_service.build_sentiment_phrases_embeddings(use_cache=False)
-                result = sentiment_service.analyze_emotion(user_input)
-                reason = "rebuilt"
-            except Exception as rebuild_error:
-                logger.error(
-                    "Failed rebuilding sentiment prototypes: %s", rebuild_error
-                )
-                result = _neutral_sentiment_output()
-                reason = "fallback"
-        except Exception as unexpected_error:
-            logger.error("Unexpected sentiment analysis error: %s", unexpected_error)
-            result = _neutral_sentiment_output()
-            reason = "fallback"
-
-    result_json = result.model_dump(mode='json')
-    tool_context.state["sentiment_output"] = result_json
-    return {
-        "status": "success",
-        "reason": reason,
-        "sentiment": result_json,
-    }
-
-
-logger.info("Sentiment tool configured.")
-
 # There are two different storage areas:
 # tool_context.state[...] is the shared session state backing the entire workflow.
 # Only the tool mutates the sentiment_output entry there, and no other component writes to that key.
-# The agent’s output_key controls what value gets returned as this agent’s final response
+# The agent's output_key controls what value gets returned as this agent's final response
 # to the orchestrator; The agent's sentiment_output does not overwrite the session state directly.
 sentiment_agent = Agent(
     name="sentiment_analysis",
@@ -282,11 +117,9 @@ sentiment_agent = Agent(
     instruction=SENTIMENT_AGENT_INSTRUCTION,
     tools=[run_sentiment_analysis],
     output_key="sentiment_output",
-   #output_schema=SentimentOutput,
 )
 
-logger.info("Sentiment agent created.")
-
+logger.info("Sentiment Agent configured")
 
 ######################################
 ## DRAFT COMPOSER AGENT
@@ -304,31 +137,9 @@ draft_composer_agent = Agent(
 
 logger.info("DraftComposerAgent configured")
 
-
 ######################################
 ## SAFETY CHECK AGENT
 ######################################
-
-@FunctionTool
-def flag_for_human_review(
-    tool_context: ToolContext, reason: str, severity: str
-) -> dict[str, str]:
-    """
-    Flag a response for human review when safety concerns are critical.
-
-    Args:
-        reason: Explanation of why human review is needed
-        severity: One of ["low", "medium", "high", "critical"]
-    """
-    tool_context.state["flagged_for_review"] = True
-    tool_context.state["flag_reason"] = reason
-    tool_context.state["flag_severity"] = severity
-
-    # In production, this could trigger a notification or queue system
-    logger.warning("FLAGGED FOR REVIEW [%s]: %s", severity, reason)
-
-    return {"status": "flagged", "severity": severity}
-
 
 safety_check_agent = Agent(
     name="SafetyCheckAgent",
@@ -343,56 +154,48 @@ safety_check_agent = Agent(
 
 logger.info("SafetyCheckAgent configured")
 
-
 ######################################
-## AGGREGATOR WITH SAFETY (COMPOSITE AGENT)
+## COMPOSITE AGENTS (WORKFLOW)
 ######################################
 
-# Create a sequential agent that combines draft composition with safety checking
+# Sequential agent: draft composition followed by safety checking
 aggregator_with_safety = SequentialAgent(
     name="AggregatorWithSafety",
     sub_agents=[
-        draft_composer_agent,  # Compose draft response
-        safety_check_agent,    # Validate and finalize
+        draft_composer_agent,
+        safety_check_agent,
     ],
 )
 
 logger.info("AggregatorWithSafety configured")
 
-
-######################################
-## WORKFLOW AGENTS
-######################################
-
-# The ParallelAgent runs all its sub-agents simultaneously.
+# Parallel agent: RAG and Sentiment run simultaneously
 parallel_rag_sentiment_agent = ParallelAgent(
     name="ParallelRAGAndSentimentTeam",
     sub_agents=[sentiment_agent, rag_agent],
 )
 
-# Simplified root agent - safety is now embedded in the aggregator
+# Root agent: orchestrates the full workflow
 root_agent = SequentialAgent(
     name="VaccineChatbotRootAgent",
     sub_agents=[
         parallel_rag_sentiment_agent,  # Parallel: RAG + Sentiment
-        aggregator_with_safety,        # Sequential: Draft → Safety
+        aggregator_with_safety,        # Sequential: Draft -> Safety
     ],
 )
 
 logger.info("Root agent workflow configured")
-
 
 ######################################
 ## RUNNER SETUP
 ######################################
 
 # Persistent memory using a SQLite database
-# SQLite database will be created automatically
 session_service = DatabaseSessionService(db_url=DB_URL)
 
 events_compaction_config = EventsCompactionConfig(
     compaction_interval=3,  # Trigger compaction every 3 invocations
-    overlap_size=1,  # Keep 1 previous turn for context
+    overlap_size=1,         # Keep 1 previous turn for context
 )
 
 vax_talk_assistant = App(
@@ -403,13 +206,14 @@ vax_talk_assistant = App(
 
 runner = Runner(app=vax_talk_assistant, session_service=session_service)
 
-
 ######################################
 ## MAIN ENTRY POINT
 ######################################
 
+
 def main():
-    """Main entry point for launching VaxTalk web application.
+    """
+    Main entry point for launching VaxTalk web application.
 
     This function launches the ADK web interface with all configured parameters.
     It can be invoked via 'uv run vaxtalk' after installing the package.
@@ -418,13 +222,12 @@ def main():
     import sys
     import os
 
-    # Change to project root directory (already computed at module level)
+    # Change to project root directory
     os.chdir(project_root)
 
     logger.info("Launching VaxTalk Assistant...")
     logger.info("Working directory: %s", project_root)
 
-    # Build the adk web command with all parameters
     cmd = [
         "adk", "web",
         "--port", "42423",
@@ -444,5 +247,4 @@ def main():
 
 
 # Export root_agent for ADK web launcher
-# This is required so 'adk web' can find and load the agent
 __all__ = ["root_agent", "vax_talk_assistant", "runner", "main"]
