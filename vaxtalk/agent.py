@@ -103,11 +103,6 @@ logger.info("RAG Agent configured")
 ## SENTIMENT AGENT
 ######################################
 
-# There are two different storage areas:
-# tool_context.state[...] is the shared session state backing the entire workflow.
-# Only the tool mutates the sentiment_output entry there, and no other component writes to that key.
-# The agent's output_key controls what value gets returned as this agent's final response
-# to the orchestrator; The agent's sentiment_output does not overwrite the session state directly.
 sentiment_agent = Agent(
     name="sentiment_analysis",
     model=LlmConnectionFactory.get_llm_connection(
@@ -116,7 +111,7 @@ sentiment_agent = Agent(
     ),
     instruction=SENTIMENT_AGENT_INSTRUCTION,
     tools=[run_sentiment_analysis],
-    output_key="sentiment_output",
+    output_key="sentiment_analysis_summary",
 )
 
 logger.info("Sentiment Agent configured")
