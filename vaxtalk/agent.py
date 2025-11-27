@@ -115,6 +115,8 @@ ESCALATION_NOTICE_TEXT = os.getenv(
 ).strip()
 DEFAULT_ESCALATION_TEMPLATE = (
     "VaxTalk escalation triggered.\n"
+    "Session ID: {session_id}\n"
+    "User name: {user_name}\n"
     "User message: {user_input}\n"
     "Sentiment: {sentiment_summary}"
 )
@@ -265,6 +267,70 @@ def _extract_user_input(tool_context: ToolContext) -> str:
     return "\n".join(segment.strip() for segment in segments if segment.strip())
 
 
+def _clean_optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _extract_named_field(source: Any, candidates: tuple[str, ...]) -> str | None:
+    if source is None:
+        return None
+    if isinstance(source, dict):
+        for key in candidates:
+            result = _clean_optional_str(source.get(key))
+            if result:
+                return result
+        return None
+    for key in candidates:
+        result = _clean_optional_str(getattr(source, key, None))
+        if result:
+            return result
+    return None
+
+
+def _extract_session_metadata(tool_context: ToolContext) -> dict[str, str]:
+    session_id = _clean_optional_str(getattr(tool_context, "session_id", None))
+    if not session_id:
+        session_state = getattr(tool_context, "session_state", None)
+        session_id = _clean_optional_str(
+            getattr(session_state, "session_id", None)
+        ) or _clean_optional_str(getattr(session_state, "id", None))
+    if not session_id:
+        session = getattr(tool_context, "session", None)
+        session_id = _clean_optional_str(
+            getattr(session, "session_id", None)
+        ) or _clean_optional_str(getattr(session, "id", None))
+    if not session_id and isinstance(getattr(tool_context, "state", None), dict):
+        session_id = _clean_optional_str(
+            tool_context.state.get("session_id")
+        ) or _clean_optional_str(tool_context.state.get("session:id"))
+
+    user_name = _clean_optional_str(getattr(tool_context, "user_name", None))
+    if not user_name:
+        user_name = _extract_named_field(
+            getattr(tool_context, "user", None),
+            ("display_name", "name", "user_name"),
+        )
+    if not user_name:
+        user_name = _extract_named_field(
+            getattr(tool_context, "user_metadata", None),
+            ("display_name", "name", "user_name"),
+        )
+    if not user_name and isinstance(getattr(tool_context, "state", None), dict):
+        profile = tool_context.state.get("user_profile")
+        user_name = _extract_named_field(
+            profile,
+            ("display_name", "name", "user_name"),
+        ) or _clean_optional_str(tool_context.state.get("user_name"))
+
+    return {
+        "session_id": session_id or "<unknown session>",
+        "user_name": user_name or "<unknown user>",
+    }
+
+
 def _sentiment_value(sentiment: SentimentOutput, dimension: str) -> Intensity | None:
     value_raw = getattr(sentiment, dimension, None)
     if value_raw is None:
@@ -287,7 +353,11 @@ def _should_trigger_escalation(sentiment: SentimentOutput) -> bool:
     return False
 
 
-def _render_escalation_message(sentiment: SentimentOutput, user_input: str) -> str:
+def _render_escalation_message(
+    sentiment: SentimentOutput,
+    user_input: str,
+    metadata: dict[str, str],
+) -> str:
     trimmed_input = (user_input or "").strip()
     if len(trimmed_input) > 600:
         trimmed_input = f"{trimmed_input[:600]}..."
@@ -301,16 +371,29 @@ def _render_escalation_message(sentiment: SentimentOutput, user_input: str) -> s
     data = {
         "user_input": trimmed_input,
         "sentiment_summary": sentiment_summary,
+        "session_id": metadata.get("session_id", "<unknown session>"),
+        "user_name": metadata.get("user_name", "<unknown user>"),
     }
     template = ESCALATION_MESSAGE_TEMPLATE or DEFAULT_ESCALATION_TEMPLATE
     try:
-        return template.format(**data)
+        message = template.format(**data)
     except KeyError as exc:
         logger.warning(
             "Invalid ESCALATION_MESSAGE_TEMPLATE placeholder %s; using default template.",
             exc,
         )
-        return DEFAULT_ESCALATION_TEMPLATE.format(**data)
+        message = DEFAULT_ESCALATION_TEMPLATE.format(**data)
+
+    template_includes_session = "{session_id" in template
+    template_includes_user = "{user_name" in template
+    if not (template_includes_session and template_includes_user):
+        metadata_block = (
+            "Session ID: {session_id}\nUser name: {user_name}"
+        ).format(**data)
+        if metadata_block not in message:
+            message = f"{message}\n{metadata_block}"
+
+    return message
 
 
 def _send_telegram_notification(message: str) -> bool:
@@ -354,7 +437,8 @@ def _maybe_trigger_escalation(
     if ESCALATION_NOTICE_TEXT:
         tool_context.state["escalation_notice"] = ESCALATION_NOTICE_TEXT
 
-    message = _render_escalation_message(sentiment, user_input)
+    metadata = _extract_session_metadata(tool_context)
+    message = _render_escalation_message(sentiment, user_input, metadata)
     success = _send_telegram_notification(message)
     tool_context.state["escalation:notified"] = True
     tool_context.state["escalation:status"] = "sent" if success else "failed"
