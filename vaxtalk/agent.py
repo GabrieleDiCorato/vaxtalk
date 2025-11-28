@@ -209,11 +209,11 @@ vax_talk_assistant = App(
     events_compaction_config=events_compaction_config,
 )
 
-initial_state = {
-    "default__response_language": DEFAULT_LANGUAGE
-}
+#initial_state = {"default__response_language": DEFAULT_LANGUAGE}
 
-session = session_service.create_session(app_name=APP_NAME, user_id = "user", state=initial_state)
+#session = session_service.create_session(
+#    app_name=APP_NAME, user_id="user", state=initial_state
+#)
 runner = Runner(app=vax_talk_assistant, session_service=session_service)
 
 ######################################
