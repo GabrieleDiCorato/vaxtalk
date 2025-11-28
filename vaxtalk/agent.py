@@ -24,7 +24,7 @@ from vaxtalk.prompts import (
     DRAFT_COMPOSER_INSTRUCTION,
     SAFETY_CHECK_INSTRUCTION,
 )
-from vaxtalk.tools import rag_tool, run_sentiment_analysis, flag_for_human_review
+from vaxtalk.tools import rag_tool, run_sentiment_analysis, flag_for_human_review, get_draft_for_validation
 
 
 ######################################
@@ -150,7 +150,7 @@ safety_check_agent = Agent(
         retry_config=retry_config
     ),
     instruction=SAFETY_CHECK_INSTRUCTION,
-    tools=[flag_for_human_review],
+    tools=[get_draft_for_validation, flag_for_human_review],
     output_key="final_response",
 )
 
