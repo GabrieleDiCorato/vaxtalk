@@ -1,8 +1,7 @@
 """VaxTalkAssistant: An AI assistant for vaccine information using RAG and sentiment analysis.
 
 To launch the application:
-    adk web --port 42423 --session_service_uri sqlite+aiosqlite:///cache/vaxtalk_sessions.db \
-        --logo-text VaxTalkAssistant
+    uv run vaxtalk
 """
 
 from pathlib import Path
@@ -56,6 +55,7 @@ logger.info("Environment variables loaded")
 # Application Configuration
 APP_NAME = get_env_variable("APP_NAME", "VaxTalkAssistant")
 DEFAULT_LANGUAGE = get_env_variable("DEFAULT_LANGUAGE", "italian")
+APP_LOGO = get_env_variable("APP_LOGO", None)
 
 # Model Configuration
 MODEL_RAG = get_env_variable("MODEL_RAG", "gemini-2.5-flash-lite")
@@ -243,8 +243,9 @@ def main():
         "--port", "42423",
         "--session_service_uri", f'"{DB_URL}"',
         "--logo-text", APP_NAME,
-        "--logo-image-url", "https://drive.google.com/file/d/1ajO7VOLybRS6lVEKoTiBy6YrUUlY"
     ]
+    if APP_LOGO:
+        cmd.extend(["--logo-image-url", APP_LOGO])
 
     try:
         subprocess.run(" ".join(cmd), check=True)
