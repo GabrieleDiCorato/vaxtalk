@@ -1,7 +1,7 @@
 """
 RAG Retrieval Tool
 
-Provides the retrieve_info FunctionTool for querying the vaccine knowledge base.
+Provides the rag_tool FunctionTool for querying the vaccine knowledge base.
 """
 
 from pathlib import Path
@@ -77,7 +77,7 @@ def rag_tool(query: str) -> str:
         Formatted string with relevant information and sources
 
     Examples:
-        >>> result = retrieve_info("What are the side effects of COVID vaccines?")
+        >>> result = rag_tool("What are the side effects of COVID vaccines?")
         >>> print(result)  # Returns relevant chunks with source citations
     """
     return rag_kb.retrieve(query, k=RAG_RETRIEVAL_K)
