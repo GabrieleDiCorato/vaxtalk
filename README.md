@@ -1,5 +1,9 @@
 # VaxTalk - AI-Powered Vaccine Information Assistant
 
+> **⚠️ PROJECT STATUS: COMPLETED / ARCHIVED**
+>
+> This project was developed as a team assignment for a Master's program exam. It is now **concluded** and **will not be maintained**. The code is provided as-is for educational purposes.
+
 A Retrieval-Augmented Generation (RAG) chatbot that provides accurate vaccine information by combining document retrieval with AI-powered responses and sentiment analysis.
 
 ## 📋 Context
@@ -8,7 +12,7 @@ This project was developed as a **homework assignment for a Master's program in 
 
 - **RAG (Retrieval-Augmented Generation)** techniques for grounding AI responses in factual documents
 - **Multi-agent orchestration** using Google's Agent Development Kit (ADK)
-- **Sentiment analysis** to understand user emotional state
+- **Sentiment analysis** to understand user emotional state and possibly trigger escalations (human intervention)
 - **Document processing** from multiple sources (PDFs and web pages)
 - **Vector embeddings** for semantic search
 - **Persistent session management** for conversational continuity. An introduction to context engineering.
